@@ -1,0 +1,590 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+    Ship, Settings, LayoutList, Settings2, Trash2, MapPin, 
+    PlusCircle, Container, Check, Trash, Anchor, Folder, 
+    MessageSquare, Save, Archive, RefreshCcw, CheckCircle, 
+    Loader2, AlertTriangle, ExternalLink, LogOut, Lock, 
+    User, Calendar, ListFilter, ChevronDown, ChevronRight,
+    Printer, Download, FileSpreadsheet, FileText, CheckSquare, Square
+} from 'lucide-react';
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc, query } from "firebase/firestore";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInWithCustomToken, signOut } from "firebase/auth";
+
+// --- CONFIGURAÇÃO DO FIREBASE ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDzfx_lsbaYZinR87qEQZ0Alvz5D8pUCJI",
+  authDomain: "doc-control---vale.firebaseapp.com",
+  projectId: "doc-control---vale",
+  storageBucket: "doc-control---vale.firebasestorage.app",
+  messagingSenderId: "475792494162",
+  appId: "1:475792494162:web:83a0601f5f2b37e926198b"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const APP_ID = "doc-control---vale"; 
+const DATA_PATH = "public/data"; 
+
+export default function App() {
+    // --- ESTADO ---
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [loginError, setLoginError] = useState("");
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
+    const [viewMode, setViewMode] = useState('user'); 
+    const [activeTab, setActiveTab] = useState('open'); 
+    const [closedGroupBy, setClosedGroupBy] = useState('port'); 
+    const [collapsedGroups, setCollapsedGroups] = useState({});
+    const [selectedGroups, setSelectedGroups] = useState(new Set()); // Grupos selecionados para exportação/impressão
+
+    const [ports, setPorts] = useState([]);
+    const [processes, setProcesses] = useState([]);
+    const [shipments, setShipments] = useState([]);
+    const [formPort, setFormPort] = useState("");
+    const [newVessel, setNewVessel] = useState({ serviceNum: '', vesselName: '' });
+    const [newPortName, setNewPortName] = useState('');
+
+    // --- AUTENTICAÇÃO ---
+    useEffect(() => {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            signInWithCustomToken(auth, __initial_auth_token).catch(() => {});
+        }
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // --- SINCRONIZAÇÃO FIREBASE ---
+    useEffect(() => {
+        if (!user) return;
+        const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
+        const unsubscribe = onSnapshot(configRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setPorts(data.ports || []);
+                setProcesses(data.processes || []);
+                setFormPort(prev => prev || (data.ports?.[0] || ""));
+            } else {
+                initializeDefaultConfig(configRef);
+            }
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+        const shipmentsRef = collection(db, 'artifacts', APP_ID, DATA_PATH, 'shipments');
+        const q = query(shipmentsRef);
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const loadedShipments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setShipments(loadedShipments);
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    // --- LÓGICA DE LOGIN/LOGOUT ---
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        setLoginError("");
+        setIsLoggingIn(true);
+        try { await signInWithEmailAndPassword(auth, email, password); } catch (error) {
+            setLoginError("E-mail ou senha incorretos.");
+            setIsLoggingIn(false);
+        }
+    };
+
+    const handleLogout = async () => { try { await signOut(auth); } catch (e) {} };
+
+    const initializeDefaultConfig = async (ref) => {
+        const defaultPorts = ["PDM - São Luís", "Pecém - Fortaleza", "Tubarão - Vitória", "Açu - Rio de Janeiro", "Sepetiba - Rio de Janeiro"];
+        const defaultProcesses = [
+            { id: 1, name: "Reg. ANTAQ", options: ["FAZER CADASTRO", "AGUARDANDO RETORNO", "CADASTRO FEITO"] },
+            { id: 2, name: "Mercante", options: ["ESCALA + OP", "MANIFESTO + CE", "DUE RECEBIDA", "CE RETIF.", "ARQUEAÇÃO", "DESATRACAR"] },
+            { id: 3, name: "Essdocs", options: ["CADASTRAR", "AGUARDANDO IE", "PENDENTE", "APROVADO"] },
+            { id: 4, name: "Draft Inicial", options: ["AGUARDANDO IE", "PENDENTE", "APROVADO"] },
+            { id: 5, name: "Draft Final", options: ["ENVIADO", "PENDENTE", "APROVADO"] }
+        ];
+        try { await setDoc(ref, { ports: defaultPorts, processes: defaultProcesses }); } catch (e) {}
+    };
+
+    // --- OPERAÇÕES ---
+    const handleAddShipment = async (e) => {
+        e.preventDefault();
+        if (!newVessel.serviceNum || !newVessel.vesselName || !user) return;
+        const initialStatus = {};
+        processes.forEach(p => initialStatus[p.id] = p.options?.[0] || "");
+        try {
+            await addDoc(collection(db, 'artifacts', APP_ID, DATA_PATH, 'shipments'), {
+                createdAt: Date.now(),
+                closedAt: null,
+                port: formPort,
+                serviceNum: newVessel.serviceNum,
+                vessel: newVessel.vesselName.toUpperCase(),
+                status: initialStatus,
+                comments: "",
+                isClosed: false
+            });
+            setNewVessel({ serviceNum: '', vesselName: '' });
+            setActiveTab('open');
+        } catch (error) { alert(error.message); }
+    };
+
+    const updateShipmentField = async (id, field, value) => {
+        if (!user) return;
+        try { await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', id), { [field]: value }); } catch (e) {}
+    };
+
+    const updateStatus = (id, pid, val) => updateShipmentField(id, `status.${pid}`, val);
+
+    const toggleShipmentClosedState = (ship) => {
+        const newState = !ship.isClosed;
+        updateShipmentField(ship.id, 'isClosed', newState);
+        updateShipmentField(ship.id, 'closedAt', newState ? Date.now() : null);
+    };
+
+    const deleteShipment = async (id) => {
+        if (!window.confirm("Confirmar exclusão?")) return;
+        try { await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', id)); } catch (e) {}
+    };
+
+    const addPort = async () => {
+        if (!newPortName.trim()) return;
+        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { ports: [...ports, newPortName.trim()] });
+        setNewPortName('');
+    };
+
+    // --- UTILITÁRIOS DE AGRUPAMENTO ---
+    const getWeekNumber = (d) => {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    };
+
+    const getGroupName = (ship, criteria) => {
+        const date = new Date(ship.closedAt || ship.createdAt);
+        if (criteria === 'port') return ship.port;
+        if (criteria === 'month') return date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase();
+        if (criteria === 'quarter') {
+            const quarter = Math.floor(date.getMonth() / 3) + 1;
+            return `TRIMESTRE ${quarter} - ${date.getFullYear()}`;
+        }
+        if (criteria === 'year') return `ANO ${date.getFullYear()}`;
+        if (criteria === 'week') return `SEMANA ${getWeekNumber(date)} / ${date.getFullYear()}`;
+        return 'OUTROS';
+    };
+
+    const toggleGroupSelection = (groupName) => {
+        setSelectedGroups(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(groupName)) newSet.delete(groupName);
+            else newSet.add(groupName);
+            return newSet;
+        });
+    };
+
+    const toggleAllGroups = (groups, expand) => {
+        const newCollapsed = {};
+        if (!expand) {
+            Object.keys(groups).forEach(g => newCollapsed[g] = true);
+        }
+        setCollapsedGroups(newCollapsed);
+    };
+
+    // --- EXPORTAÇÃO E IMPRESSÃO ---
+    const handlePrint = () => {
+        if (selectedGroups.size === 0) {
+            alert("Selecione ao menos um grupo para imprimir.");
+            return;
+        }
+        window.print();
+    };
+
+    const handleExportCSV = () => {
+        if (selectedGroups.size === 0) {
+            alert("Selecione ao menos um grupo para exportar.");
+            return;
+        }
+
+        let csvContent = "Porto;Navio;Servico;Progresso;Comentarios;Encerrado Em\n";
+        
+        Object.keys(groups).forEach(groupName => {
+            if (selectedGroups.has(groupName)) {
+                groups[groupName].forEach(ship => {
+                    const prog = calculateProgress(ship);
+                    const closedDate = ship.closedAt ? new Date(ship.closedAt).toLocaleDateString() : "";
+                    csvContent += `${ship.port};${ship.vessel};${ship.serviceNum};${prog}%;${(ship.comments || "").replace(/;/g, ",")};${closedDate}\n`;
+                });
+            }
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", `export_doccontrol_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const calculateProgress = (ship) => {
+        if (processes.length === 0) return 0;
+        let total = 0;
+        processes.forEach(proc => {
+            const val = ship.status?.[proc.id] || "";
+            const idx = proc.options?.indexOf(val) ?? -1;
+            if (idx >= 0) total += idx / (proc.options.length - 1);
+        });
+        return Math.round((total / processes.length) * 100);
+    };
+
+    const getStatusColor = (value) => {
+        if (["APROVADO", "CADASTRO FEITO", "DESATRACAR", "DUE RECEBIDA"].includes(value)) return "bg-green-100 text-green-800 border-green-200";
+        if (["PENDENTE", "AGUARDANDO RETORNO", "AGUARDANDO IE"].includes(value)) return "bg-yellow-100 text-yellow-800 border-yellow-200";
+        return "bg-white text-slate-700 border-slate-300";
+    };
+
+    // Agrupamento
+    const filteredShipments = useMemo(() => {
+        return shipments.filter(s => activeTab === 'open' ? !s.isClosed : s.isClosed);
+    }, [shipments, activeTab]);
+
+    const groups = useMemo(() => {
+        const g = {};
+        filteredShipments.forEach(ship => {
+            const groupName = activeTab === 'open' ? ship.port : getGroupName(ship, closedGroupBy);
+            if (!g[groupName]) g[groupName] = [];
+            g[groupName].push(ship);
+        });
+        return g;
+    }, [filteredShipments, activeTab, closedGroupBy]);
+
+    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500 gap-2 font-bold"><Loader2 className="animate-spin" /> Carregando base de dados...</div>;
+
+    if (!user) return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-200 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                <div className="bg-slate-900 p-8 text-center">
+                    <div className="inline-flex bg-blue-600 p-3 rounded-xl mb-4 shadow-lg"><Ship size={32} className="text-white" /></div>
+                    <h1 className="text-2xl font-bold text-white">DocControl <span className="text-blue-400">Pro</span></h1>
+                    <p className="text-slate-400 text-sm mt-1">Acesso à Gestão Vale</p>
+                </div>
+                <div className="p-8">
+                    {loginError && <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2"><AlertTriangle size={16} />{loginError}</div>}
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Usuário</label>
+                            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="e-mail corporativo" required />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Senha</label>
+                            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" placeholder="senha" required />
+                        </div>
+                        <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all">{isLoggingIn ? <Loader2 className="animate-spin" /> : "Entrar"}</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen flex flex-col bg-slate-100 font-sans text-slate-900">
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+                .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+                
+                @media print {
+                    .no-print { display: none !important; }
+                    .print-only { display: block !important; }
+                    body { background: white !important; }
+                    .group-section { break-inside: avoid; border: 1px solid #eee; margin-bottom: 20px; }
+                    .main-container { padding: 0 !important; }
+                    .unselected-group { display: none !important; }
+                }
+            `}</style>
+
+            <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center z-30 sticky top-0 no-print">
+                <div className="flex items-center gap-3">
+                    <div className="bg-blue-600 p-2 rounded-lg"><Ship size={24} className="text-white" /></div>
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight">DocControl <span className="text-blue-400">Pro</span></h1>
+                        <p className="text-xs text-slate-400 font-mono tracking-tight">{user.email}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button onClick={() => setViewMode(viewMode === 'user' ? 'master' : 'user')} className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'master' ? 'bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'}`}>{viewMode === 'user' ? <Settings size={16} /> : <LayoutList size={16} />}</button>
+                    <button onClick={handleLogout} className="bg-red-500/10 hover:bg-red-500 text-red-400 p-2 rounded-md border border-red-500/20 transition-all"><LogOut size={18} /></button>
+                </div>
+            </header>
+
+            <main className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col main-container">
+                {viewMode === 'master' ? (
+                    <div className="max-w-4xl mx-auto w-full bg-white p-8 rounded-xl shadow-sm animate-fade-in no-print">
+                        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><Settings2 className="text-amber-600" /> Painel Administrativo</h2>
+                        <div className="bg-slate-50 p-6 rounded-lg border border-slate-200">
+                            <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-700 uppercase text-xs tracking-widest"><Anchor size={14} /> Cadastrar Novo Porto</h3>
+                            <div className="flex gap-2">
+                                <input type="text" value={newPortName} onChange={e => setNewPortName(e.target.value)} placeholder="Nome do Porto..." className="flex-1 p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500" />
+                                <button onClick={addPort} className="bg-blue-600 text-white px-6 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-md">Adicionar</button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col h-full gap-6 animate-fade-in">
+                        {/* Formulário de Criação (Apenas Operacional) */}
+                        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between md:items-end gap-4 no-print">
+                            <div className="flex flex-col gap-2 min-w-[250px]">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Porto de Atendimento</label>
+                                <select value={formPort} onChange={(e) => setFormPort(e.target.value)} className="w-full bg-slate-50 border p-2.5 rounded-lg font-bold outline-none cursor-pointer">
+                                    {ports.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                            <form onSubmit={handleAddShipment} className="flex-1 flex flex-col md:flex-row gap-3 items-end">
+                                <div className="flex-1 w-full"><input type="text" placeholder="Nº Atendimento" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-full border p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                                <div className="flex-[2] w-full"><input type="text" placeholder="Nome do Navio" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="w-full border p-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" /></div>
+                                <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-lg"><PlusCircle size={18} /> Novo Navio</button>
+                            </form>
+                        </div>
+
+                        {/* Barra de Navegação e Filtros */}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-200 no-print">
+                            <div className="flex gap-2">
+                                <button onClick={() => setActiveTab('open')} className={`px-6 py-3 text-sm font-bold border-b-2 transition-all ${activeTab === 'open' ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Folder size={16} className="inline mr-1" /> Em Curso</button>
+                                <button onClick={() => setActiveTab('closed')} className={`px-6 py-3 text-sm font-bold border-b-2 transition-all ${activeTab === 'closed' ? 'border-green-600 text-green-700 bg-green-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}><Archive size={16} className="inline mr-1" /> Encerrados</button>
+                            </div>
+                            
+                            {activeTab === 'closed' && (
+                                <div className="flex items-center gap-4 mb-2 md:mb-0">
+                                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                                        <ListFilter size={14} className="text-slate-400" />
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Agrupamento:</label>
+                                        <select 
+                                            value={closedGroupBy} 
+                                            onChange={(e) => setClosedGroupBy(e.target.value)}
+                                            className="text-xs font-bold text-blue-600 bg-transparent outline-none cursor-pointer"
+                                        >
+                                            <option value="port">Porto</option>
+                                            <option value="month">Mês / Ano</option>
+                                            <option value="quarter">Trimestre / Ano</option>
+                                            <option value="year">Ano</option>
+                                            <option value="week">Semana</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex gap-2 border-l pl-4">
+                                        <button onClick={() => toggleAllGroups(groups, true)} className="text-[10px] font-bold text-slate-500 hover:text-blue-600 uppercase transition-colors">Expandir Tudo</button>
+                                        <button onClick={() => toggleAllGroups(groups, false)} className="text-[10px] font-bold text-slate-500 hover:text-blue-600 uppercase transition-colors">Recolher Tudo</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Ações em Massa (Apenas Encerrados) */}
+                        {activeTab === 'closed' && selectedGroups.size > 0 && (
+                            <div className="flex items-center justify-between bg-blue-600 text-white p-3 rounded-lg shadow-lg animate-fade-in no-print">
+                                <div className="flex items-center gap-4">
+                                    <CheckSquare size={20} />
+                                    <span className="text-sm font-bold">{selectedGroups.size} grupo(s) selecionado(s)</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={handlePrint} className="flex items-center gap-2 bg-white text-blue-600 px-4 py-1.5 rounded-md text-xs font-bold hover:bg-slate-100 transition-all shadow-md">
+                                        <Printer size={14} /> Imprimir Relatório
+                                    </button>
+                                    <button onClick={handleExportCSV} className="flex items-center gap-2 bg-green-500 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-600 transition-all shadow-md">
+                                        <FileSpreadsheet size={14} /> Exportar Excel/CSV
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Cabeçalho de Impressão */}
+                        <div className="hidden print-only text-center mb-8">
+                            <h1 className="text-2xl font-bold uppercase tracking-widest text-slate-900 border-b-2 border-slate-900 pb-2 mb-2">Relatório de Atendimentos Encerrados</h1>
+                            <p className="text-xs text-slate-500 uppercase">Sistema DocControl Pro • {new Date().toLocaleDateString('pt-BR')} • {new Date().toLocaleTimeString('pt-BR')}</p>
+                            <p className="text-xs font-bold mt-2">Critério de Agrupamento: {closedGroupBy.toUpperCase()}</p>
+                        </div>
+
+                        {/* Grid de Dados */}
+                        <div className="flex-1 bg-white border border-slate-200 rounded-b-xl shadow-sm overflow-hidden flex flex-col -mt-px relative">
+                            <div className="overflow-auto custom-scrollbar flex-1 relative p-2 pb-32">
+                                {Object.keys(groups).sort((a,b) => b.localeCompare(a)).map(groupName => (
+                                    <GroupSection 
+                                        key={groupName} 
+                                        title={groupName} 
+                                        icon={closedGroupBy === 'month' || closedGroupBy === 'quarter' || closedGroupBy === 'year' ? <Calendar size={16} /> : null} 
+                                        ships={groups[groupName]} 
+                                        processes={processes} 
+                                        onStatusChange={updateStatus} 
+                                        onCommentChange={updateShipmentField} 
+                                        onToggleClose={toggleShipmentClosedState} 
+                                        onDelete={deleteShipment} 
+                                        calculateProgress={calculateProgress} 
+                                        getStatusColor={getStatusColor} 
+                                        activeTab={activeTab}
+                                        isCollapsed={!!collapsedGroups[groupName]}
+                                        onToggle={() => setCollapsedGroups(p => ({...p, [groupName]: !p[groupName]}))}
+                                        isSelected={selectedGroups.has(groupName)}
+                                        onSelect={() => toggleGroupSelection(groupName)}
+                                    />
+                                ))}
+
+                                {filteredShipments.length === 0 && (
+                                    <div className="h-64 flex flex-col items-center justify-center text-slate-400 no-print">
+                                        <Container size={64} className="opacity-10 mb-4" />
+                                        <p className="font-medium">Nenhum registro encontrado nesta visualização.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </main>
+        </div>
+    );
+}
+
+function GroupSection({ title, ships, processes, onStatusChange, onCommentChange, onToggleClose, onDelete, calculateProgress, getStatusColor, activeTab, icon, isCollapsed, onToggle, isSelected, onSelect }) {
+    return (
+        <div className={`group-section mb-6 border rounded-xl overflow-hidden shadow-sm transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'} ${!isSelected && activeTab === 'closed' ? 'unselected-group' : ''}`}>
+            {/* Cabeçalho do Grupo */}
+            <div className="bg-slate-50 px-4 py-3 border-b flex items-center justify-between z-10 sticky top-0">
+                <div className="flex items-center gap-3">
+                    {activeTab === 'closed' && (
+                        <button onClick={onSelect} className={`no-print transition-colors ${isSelected ? 'text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
+                            {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2 text-slate-700 font-extrabold text-sm uppercase cursor-pointer select-none" onClick={onToggle}>
+                        {isCollapsed ? <ChevronRight size={18} className="text-slate-400 no-print" /> : <ChevronDown size={18} className="text-slate-400 no-print" />}
+                        {icon || <MapPin size={16} className="text-blue-400" />}
+                        {title}
+                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px] ml-2 font-mono">{ships.length} itens</span>
+                    </div>
+                </div>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400 no-print">
+                    {isCollapsed ? 'Exibir Tudo' : 'Recolher Painel'}
+                </div>
+            </div>
+
+            {/* Tabela de Dados */}
+            {!isCollapsed && (
+                <div className="bg-white overflow-x-auto">
+                    <div className="flex border-b bg-slate-50/50 text-[10px] uppercase font-bold text-slate-400">
+                        <div className="w-64 p-3 border-r flex-shrink-0">Embarcação / Pasta</div>
+                        {processes.map(p => <div key={p.id} className="w-48 p-3 border-r text-center flex-shrink-0">{p.name}</div>)}
+                        <div className="w-24 p-3 text-center flex-shrink-0 no-print">Ações</div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                        {ships.map(ship => (
+                            <ShipRow key={ship.id} ship={ship} processes={processes} onStatusChange={onStatusChange} onCommentChange={onCommentChange} onToggleClose={onToggleClose} onDelete={onDelete} calculateProgress={calculateProgress} getStatusColor={getStatusColor} activeTab={activeTab} />
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ShipRow({ ship, processes, onStatusChange, onCommentChange, onToggleClose, onDelete, calculateProgress, getStatusColor, activeTab }) {
+    const [expanded, setExpanded] = useState(false);
+    const progress = calculateProgress(ship);
+
+    return (
+        <div className={`transition-colors ${activeTab === 'closed' ? 'bg-white' : 'hover:bg-slate-50'}`}>
+            <div className="flex items-stretch min-h-[70px]">
+                <div className="w-64 p-3 border-r flex flex-col justify-center relative flex-shrink-0">
+                    <div className="flex items-start gap-2">
+                        <div className={`p-1.5 rounded ${activeTab === 'closed' ? 'bg-slate-100 text-slate-400' : 'bg-yellow-100 text-yellow-600'}`}>
+                            <Folder size={16} fill="currentColor" className={activeTab === 'closed' ? 'opacity-30' : 'opacity-60'} />
+                        </div>
+                        <div className="overflow-hidden">
+                            <div className="font-extrabold text-[12px] truncate uppercase tracking-tight text-slate-800">{ship.vessel}</div>
+                            <div className="text-[10px] text-blue-600 font-bold font-mono leading-tight">{ship.serviceNum}</div>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-700 ${progress === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{ width: `${progress}%` }}></div>
+                        </div>
+                        <span className="text-[9px] font-bold text-slate-400">{progress}%</span>
+                    </div>
+
+                    <button 
+                        onClick={() => setExpanded(!expanded)} 
+                        className={`absolute top-2 right-2 p-1.5 rounded-md hover:bg-slate-200 transition-colors no-print ${ship.comments ? 'text-blue-600' : 'text-slate-300'}`}
+                        title="Notas"
+                    >
+                        <MessageSquare size={14} />
+                    </button>
+                </div>
+
+                {processes.map(proc => {
+                    const statusVal = ship.status?.[proc.id] || "";
+                    return (
+                        <div key={proc.id} className="w-48 p-2 border-r flex items-center justify-center flex-shrink-0">
+                            {activeTab === 'closed' ? (
+                                <div className={`text-[10px] font-extrabold px-3 py-1.5 rounded-lg border text-center w-full uppercase ${getStatusColor(statusVal)}`}>
+                                    {statusVal}
+                                </div>
+                            ) : (
+                                <select 
+                                    value={statusVal} 
+                                    onChange={(e) => onStatusChange(ship.id, proc.id, e.target.value)}
+                                    className={`w-full text-[10px] font-extrabold py-2 px-2 rounded-lg border outline-none transition-all ${getStatusColor(statusVal)} cursor-pointer focus:ring-2 focus:ring-blue-300`}
+                                >
+                                    {proc.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            )}
+                        </div>
+                    );
+                })}
+
+                <div className="w-24 flex items-center justify-center gap-2 flex-shrink-0 no-print bg-slate-50/20 border-l">
+                    <button 
+                        onClick={() => onToggleClose(ship)} 
+                        className={`p-2 rounded-full border shadow-sm transition-all transform active:scale-90 ${activeTab === 'open' ? 'text-green-600 bg-white hover:bg-green-50' : 'text-amber-600 bg-white hover:bg-amber-50'}`}
+                        title={activeTab === 'open' ? "Encerrar" : "Reabrir"}
+                    >
+                        {activeTab === 'open' ? <CheckCircle size={16} /> : <RefreshCcw size={16} />}
+                    </button>
+                    <button 
+                        onClick={() => onDelete(ship.id)} 
+                        className="p-2 rounded-full border bg-white text-slate-300 hover:text-red-500 hover:border-red-200 transition-all shadow-sm transform active:scale-90"
+                    >
+                        <Trash size={16} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Comentários/Notas */}
+            {(expanded || (ship.comments && (expanded || activeTab === 'open'))) && (
+                <div className="p-4 bg-slate-50/50 border-t border-dashed border-slate-200 animate-fade-in print:bg-white">
+                    <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <FileText size={12} /> Observações de Atendimento
+                    </div>
+                    {activeTab === 'closed' ? (
+                        <p className="text-xs text-slate-600 italic whitespace-pre-wrap px-2">{ship.comments || "Sem observações registradas."}</p>
+                    ) : (
+                        <textarea 
+                            className="w-full text-xs p-3 border rounded-xl bg-white min-h-[80px] outline-none focus:ring-2 focus:ring-blue-400 transition-all shadow-inner" 
+                            placeholder="Notas manuais..." 
+                            value={ship.comments || ""} 
+                            onChange={(e) => onCommentChange(ship.id, 'comments', e.target.value)} 
+                        />
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
