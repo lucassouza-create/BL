@@ -696,7 +696,7 @@ export default function App() {
                                             <span className="bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{groupShips.length} Atendimentos</span>
                                         </div>
                                         {!isCollapsed && (
-                                            <div className="overflow-x-auto ">
+                                            <div className="overflow-x-auto custom-scrollbar">
                                                 <table className="w-full text-left">
                                                     <thead>
                                                         <tr className="bg-slate-50/30 text-[10px] uppercase font-black text-slate-400 tracking-widest border-b border-slate-100">
