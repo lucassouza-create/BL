@@ -11,7 +11,7 @@
     .no-print { display: none !important; }
     .print-only { display: block !important; }
     body { background: white !important; }
-    .group-section { break-inside: avoid; border: 1px solid #eee; margin-bottom: 0px; }
+    .group-section { break-inside: avoid; border: 1px solid #eee; margin-bottom: 20px; }
     .main-container { padding: 0 !important; }
     .unselected-group { display: none !important; }
 }
