@@ -842,7 +842,7 @@ export default function App() {
                 </div>
             )}
             
-            <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-[6px] text-slate-400 text-center py-2 border-t bg-white uppercase font-bold tracking-widest">
+            <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-[6px] text-slate-400 text-center py-0 border-t bg-white uppercase font-bold tracking-widest">
                 Logística Vale S.A. | DocControl Pro | Filtros Aplicados via Pesquisa e Intervalo OBL
             </footer>
         </div>
