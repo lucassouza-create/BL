@@ -5,7 +5,8 @@ import {
     Loader2, AlertTriangle, LogOut, ChevronDown, ChevronRight,
     CheckSquare, Square, ListFilter, Calendar, Search,
     Printer, FileSpreadsheet, ClipboardList, User, Clock, 
-    X, FileText, Download, Filter, Table, MessageSquare, Send, Check
+    X, FileText, Download, Filter, Table, MessageSquare, Send, Check,
+    Archive, RotateCcw
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -44,8 +45,7 @@ const APP_ID = "doc-control---vale";
 const DATA_PATH = "public/data"; 
 
 /**
- * Utilitário para garantir que o valor do status seja sempre um Array
- * Resolve erros de .join() em dados legados (string)
+ * Utilitário para garantir que o valor do status seja sempre um Array.
  */
 const normalizeStatus = (val) => {
     if (Array.isArray(val)) return val;
@@ -54,13 +54,11 @@ const normalizeStatus = (val) => {
 };
 
 /**
- * Componente de Seleção Múltipla para as Colunas de Processo
+ * Componente de Seleção Múltipla (Tópicos/Marcadores)
  */
-const MultiSelectCell = ({ options, selected, onChange, disabled }) => {
+const MultiSelectCell = ({ options, selected, onChange, disabled, processName }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
-
-    // Normaliza o valor selecionado
     const currentSelected = normalizeStatus(selected);
 
     useEffect(() => {
@@ -80,9 +78,7 @@ const MultiSelectCell = ({ options, selected, onChange, disabled }) => {
         onChange(next);
     };
 
-    const displayText = currentSelected.length > 0 
-        ? currentSelected.join(", ") 
-        : "NENHUM";
+    const displayText = currentSelected.length > 0 ? currentSelected.join(", ") : "NENHUM";
 
     return (
         <div className="relative w-full" ref={containerRef}>
@@ -99,7 +95,10 @@ const MultiSelectCell = ({ options, selected, onChange, disabled }) => {
             </button>
 
             {isOpen && !disabled && (
-                <div className="absolute z-[60] mt-1 w-full min-w-[180px] bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 animate-in fade-in zoom-in-95 duration-200">
+                <div className="absolute z-[60] mt-1 w-full min-w-[200px] bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-2 border-b border-slate-50 mb-1">
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{processName}</p>
+                    </div>
                     <div className="max-h-56 overflow-y-auto custom-scrollbar space-y-1">
                         {options.map(opt => {
                             const isChecked = currentSelected.includes(opt);
@@ -128,6 +127,7 @@ const MultiSelectCell = ({ options, selected, onChange, disabled }) => {
 };
 
 export default function App() {
+    // --- ESTADOS GERAIS ---
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [email, setEmail] = useState("");
@@ -136,14 +136,13 @@ export default function App() {
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [viewMode, setViewMode] = useState('user'); 
     const [activeTab, setActiveTab] = useState('open'); 
-    const [closedGroupBy, setClosedGroupBy] = useState('port');
+    const [groupBy, setGroupBy] = useState('port');
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [collapsedGroups, setCollapsedGroups] = useState({});
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedShipments, setSelectedShipments] = useState(new Set());
     const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
     const [isCompactMode, setIsCompactMode] = useState(false);
-    
     const [activeShipComment, setActiveShipComment] = useState(null);
     const [newCommentText, setNewCommentText] = useState("");
 
@@ -157,6 +156,7 @@ export default function App() {
 
     const exportMenuRef = useRef(null);
 
+    // --- EFEITOS E LISTENERS ---
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportMenuOpen(false);
@@ -229,6 +229,7 @@ export default function App() {
         return () => unsubscribe();
     }, [user, viewMode]);
 
+    // --- AÇÕES DO USUÁRIO ---
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoginError("");
@@ -262,7 +263,8 @@ export default function App() {
                 oblDate: newVessel.oblDate,
                 status: initialStatus,
                 comments: [],
-                isClosed: false
+                isClosed: false,
+                isArchived: false
             });
             logAction("CRIAR_NAVIO", `Navio ${newVessel.vesselName.toUpperCase()} criado em ${formPort}`);
             setNewVessel({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
@@ -297,8 +299,10 @@ export default function App() {
     };
 
     const getGroupName = (ship, criteria) => {
-        if (activeTab === 'open') return ship.port || "Sem Porto";
         const refDate = ship.oblDate ? new Date(ship.oblDate) : new Date(ship.closedAt || ship.createdAt);
+        // Se estiver na aba arquivo, o padrão é mês/ano
+        if (activeTab === 'archive' && criteria === 'port' && !searchTerm) criteria = 'month';
+
         if (criteria === 'port') return ship.port || "Sem Porto";
         if (criteria === 'month') return refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
         if (criteria === 'quarter') return `TRIMESTRE ${Math.floor(refDate.getMonth() / 3) + 1} - ${refDate.getFullYear()}`;
@@ -310,9 +314,21 @@ export default function App() {
         return 'OUTROS';
     };
 
+    // --- FILTRAGEM E AGRUPAMENTO ---
     const filteredAndSearched = useMemo(() => {
-        let base = shipments.filter(s => activeTab === 'open' ? !s.isClosed : s.isClosed);
-        if (activeTab === 'closed' && closedGroupBy === 'range' && dateRange.start && dateRange.end) {
+        let base = shipments;
+        
+        // Lógica de abas
+        if (activeTab === 'open') {
+            base = base.filter(s => !s.isClosed && !s.isArchived);
+        } else if (activeTab === 'closed') {
+            base = base.filter(s => s.isClosed && !s.isArchived);
+        } else if (activeTab === 'archive') {
+            base = base.filter(s => s.isArchived);
+        }
+        
+        // Filtro por intervalo
+        if (groupBy === 'range' && dateRange.start && dateRange.end) {
             const start = new Date(dateRange.start).getTime();
             const end = new Date(dateRange.end).getTime() + 86400000;
             base = base.filter(s => {
@@ -320,30 +336,32 @@ export default function App() {
                 return shipDate >= start && shipDate <= end;
             });
         }
+
         return base.filter(s => {
             const search = searchTerm.toLowerCase();
             return (s.vessel || "").toLowerCase().includes(search) || 
                    (s.serviceNum || "").toLowerCase().includes(search) || 
                    (s.port || "").toLowerCase().includes(search);
         });
-    }, [shipments, activeTab, searchTerm, closedGroupBy, dateRange]);
+    }, [shipments, activeTab, searchTerm, groupBy, dateRange]);
 
     const groups = useMemo(() => {
         const g = {};
         filteredAndSearched.forEach(ship => {
-            const groupName = getGroupName(ship, closedGroupBy);
+            const groupName = getGroupName(ship, groupBy);
             if (!g[groupName]) g[groupName] = [];
             g[groupName].push(ship);
         });
         return g;
-    }, [filteredAndSearched, activeTab, closedGroupBy]);
+    }, [filteredAndSearched, activeTab, groupBy]);
 
+    // --- EXPORTAÇÃO ---
     const handleExport = (format) => {
         if (format === 'spreadsheet-pdf') { setIsCompactMode(true); setIsExportMenuOpen(false); return; }
         const dataToExport = selectedShipments.size > 0 ? shipments.filter(s => selectedShipments.has(s.id)) : filteredAndSearched;
 
         if (format === 'csv' || format === 'excel') {
-            let content = "Porto;Navio;Referência;Data OBL;Progresso;Itens Marcados\n";
+            let content = "Porto;Navio;Referência;Data OBL;Progresso;Itens Selecionados\n";
             dataToExport.forEach(s => {
                 const markers = processes.map(p => {
                     const statusArray = normalizeStatus(s.status?.[p.id]);
@@ -354,27 +372,34 @@ export default function App() {
             const blob = new Blob([content], { type: format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(blob);
-            link.download = `doccontrol_export_obl_${new Date().getTime()}.${format === 'excel' ? 'xls' : 'csv'}`;
+            link.download = `doccontrol_export_${activeTab}_obl_${new Date().getTime()}.${format === 'excel' ? 'xls' : 'csv'}`;
             link.click();
         } else if (format === 'pdf') { window.print(); }
         setIsExportMenuOpen(false);
     };
 
-    if (loading) return <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4"><Loader2 className="animate-spin text-blue-600" size={40} /><p className="text-slate-500 font-medium">A carregar DocControl Vale...</p></div>;
+    if (loading) return (
+        <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+            <Loader2 className="animate-spin text-blue-600" size={40} />
+            <p className="text-slate-500 font-medium tracking-tight">DocControl Vale: Carregando banco de dados...</p>
+        </div>
+    );
 
     if (!user) return (
         <div className="h-screen flex items-center justify-center bg-slate-100 p-4 font-sans text-slate-900">
             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white">
                 <div className="bg-slate-900 p-10 text-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 rounded-full -mr-16 -mt-16 blur-3xl"></div>
                     <div className="inline-flex bg-blue-600 p-4 rounded-2xl mb-4 relative z-10 shadow-lg"><Ship size={32} className="text-white" /></div>
                     <h1 className="text-3xl font-bold text-white relative z-10">DocControl <span className="text-blue-400">Pro</span></h1>
+                    <p className="text-slate-400 text-xs mt-2 font-black uppercase tracking-widest">Vale S.A. Logística</p>
                 </div>
                 <div className="p-10">
                     {loginError && <div className="mb-6 p-4 bg-red-50 text-red-700 text-xs rounded-xl border border-red-100 flex items-start gap-3"><AlertTriangle size={16} className="shrink-0" /><span>{loginError}</span></div>}
                     <form onSubmit={handleLogin} className="space-y-5">
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="E-mail Corporativo" required />
-                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500" placeholder="Senha" required />
-                        <button type="submit" disabled={isLoggingIn} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-blue-600 transition-all shadow-lg">{isLoggingIn ? "A autenticar..." : "Entrar"}</button>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium transition-all" placeholder="E-mail Corporativo" required />
+                        <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium transition-all" placeholder="Senha de Acesso" required />
+                        <button type="submit" disabled={isLoggingIn} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-blue-600 transition-all shadow-lg active:scale-95">{isLoggingIn ? "Autenticando..." : "Aceder ao Sistema"}</button>
                     </form>
                 </div>
             </div>
@@ -383,7 +408,6 @@ export default function App() {
 
     return (
         <div className={`min-h-screen flex flex-col bg-slate-50 font-sans text-slate-900 overflow-x-hidden ${isCompactMode ? 'compact-active' : ''}`}>
-            {/* Otimização de Impressão A4 */}
             <style>{`
                 @media print {
                     @page { size: A4 portrait; margin: 5mm; }
@@ -416,41 +440,40 @@ export default function App() {
             </header>
 
             <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full main-container">
-                {/* Header Impressão */}
                 <div className="hidden print:block mb-4 text-center border-b border-black pb-2">
                     <div className="flex justify-between items-center">
                         <div className="text-sm font-black uppercase text-slate-900">Vale S.A. - Logística de Atendimentos</div>
-                        <div className="text-[9px] font-bold text-slate-700">{isCompactMode ? 'PLANILHA CONSOLIDADA' : 'RELATÓRIO OPERACIONAL'}</div>
+                        <div className="text-[9px] font-bold text-slate-700">{isCompactMode ? 'PLANILHA DE TÓPICOS CONSOLIDADA' : 'RELATÓRIO OPERACIONAL'}</div>
                     </div>
                 </div>
 
                 {viewMode === 'master' ? (
                     <div className="space-y-8 animate-in fade-in duration-500">
                         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-                            <h2 className="text-2xl font-bold mb-8 flex items-center gap-3 text-slate-800"><Settings2 className="text-amber-500" /> Painel de Controlo Master</h2>
+                            <h2 className="text-2xl font-bold mb-8 flex items-center gap-3 text-slate-800"><Settings2 className="text-amber-500" /> Configuração Master</h2>
                             <div className="flex gap-2">
                                 <input type="text" value={newPortName} onChange={e => setNewPortName(e.target.value)} placeholder="Nome do Terminal" className="flex-1 p-4 border rounded-2xl outline-none bg-slate-50 focus:ring-2 focus:ring-blue-500" />
                                 <button onClick={async () => {
                                     if(!newPortName.trim()) return;
                                     await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { ports: [...ports, newPortName.trim()] });
                                     setNewPortName('');
-                                }} className="bg-blue-600 text-white px-8 rounded-2xl font-bold active:scale-95 transition-all">Adicionar Terminal</button>
+                                }} className="bg-blue-600 text-white px-8 rounded-2xl font-bold active:scale-95 transition-all shadow-lg shadow-blue-600/20">Adicionar Terminal</button>
                             </div>
                         </div>
 
                         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 tracking-tight"><ClipboardList className="text-blue-500" /> Auditoria de Ações</h3>
+                            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 tracking-tight"><ClipboardList className="text-blue-500" /> Log de Auditoria</h3>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm">
                                     <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-black">
-                                        <tr><th className="p-4">Data</th><th className="p-4">Usuário</th><th className="p-4">Descrição</th></tr>
+                                        <tr><th className="p-4">Timestamp</th><th className="p-4">Usuário</th><th className="p-4">Ação Realizada</th></tr>
                                     </thead>
                                     <tbody className="divide-y">
                                         {logs.map(log => (
                                             <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                                                 <td className="p-4 font-mono text-[11px]">{new Date(log.timestamp).toLocaleString('pt-PT')}</td>
                                                 <td className="p-4 font-bold text-blue-600">{log.user}</td>
-                                                <td className="p-4 text-slate-500 text-xs">{log.details}</td>
+                                                <td className="p-4 text-slate-500 text-xs font-medium">{log.details}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -460,73 +483,106 @@ export default function App() {
                     </div>
                 ) : (
                     <div className="space-y-6">
-                        {/* Barra de Busca e Cadastro */}
+                        {/* Barra de Busca e Novo Atendimento (Global) */}
                         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex flex-col gap-6 no-print">
                             <div className="flex flex-col md:flex-row gap-4 items-center">
                                 <div className="flex-1 relative w-full group">
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500" size={20} />
-                                    <input type="text" placeholder="Pesquisa dinâmica por Navio ou Porto..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-medium transition-all" />
-                                    {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500"><X size={20} /></button>}
+                                    <input 
+                                        type="text" 
+                                        placeholder="Pesquisa inteligente (Navio, AT, Terminal)..." 
+                                        value={searchTerm} 
+                                        onChange={e => setSearchTerm(e.target.value)} 
+                                        className="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-medium transition-all" 
+                                    />
+                                    {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 transition-all"><X size={20} /></button>}
                                 </div>
                                 <div className="relative" ref={exportMenuRef}>
-                                    <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-bold flex items-center gap-2 shadow-lg"><Download size={18} /> Exportar</button>
+                                    <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 active:scale-95"><Download size={18} /> Exportar</button>
                                     {isExportMenuOpen && (
-                                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100] animate-in slide-in-from-top-2">
-                                            <button onClick={() => handleExport('pdf')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors border-b"><Printer className="text-blue-600" size={18} /> Formulário Individual</button>
-                                            <button onClick={() => handleExport('spreadsheet-pdf')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors border-b bg-blue-50/30"><Table className="text-indigo-600" size={18} /> Planilha Multi-Marcadores</button>
-                                            <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors"><FileSpreadsheet className="text-green-600" size={18} /> Excel Spreadsheet</button>
+                                        <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100] animate-in slide-in-from-top-2 duration-200 overflow-hidden">
+                                            <button onClick={() => handleExport('pdf')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors border-b"><Printer className="text-blue-600" size={18} /> PDF: Formulário Individual</button>
+                                            <button onClick={() => handleExport('spreadsheet-pdf')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors border-b bg-blue-50/30"><Table className="text-indigo-600" size={18} /> PDF: Planilha Consolidada</button>
+                                            <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 text-slate-700 font-bold transition-colors"><FileSpreadsheet className="text-green-600" size={18} /> EXCEL: Tabela XLS</button>
                                         </div>
                                     )}
                                 </div>
                             </div>
 
                             <form onSubmit={handleAddShipment} className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-end border-t border-slate-100 pt-6">
-                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Terminal</label>
-                                    <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-4 border rounded-2xl bg-slate-50 font-bold outline-none border-slate-200">
+                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Localidade</label>
+                                    <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-4 border rounded-2xl bg-slate-50 font-bold outline-none border-slate-200 focus:ring-2 focus:ring-blue-500 cursor-pointer h-[58px]">
                                         {ports.map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
                                 </div>
-                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">AT / Navio</label>
-                                    <div className="flex gap-2"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-20 border p-4 rounded-2xl bg-slate-50 font-bold h-[58px]" required />
-                                        <input type="text" placeholder="Nome do Navio" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="flex-1 border p-4 rounded-2xl uppercase bg-slate-50 font-bold h-[58px]" required />
+                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Navio & AT</label>
+                                    <div className="flex gap-2"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-20 border p-4 rounded-2xl bg-slate-50 font-bold h-[58px] focus:ring-2 focus:ring-blue-500 outline-none" required />
+                                        <input type="text" placeholder="Nome do Navio" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="flex-1 border p-4 rounded-2xl uppercase bg-slate-50 font-bold h-[58px] focus:ring-2 focus:ring-blue-500 outline-none" required />
                                     </div>
                                 </div>
-                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1">Data OBL</label>
-                                    <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({...newVessel, oblDate: e.target.value})} className="w-full border p-4 rounded-2xl bg-slate-50 font-bold h-[58px]" required />
+                                <div className="flex flex-col gap-1 w-full"><label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-widest">Base de Tempo (OBL)</label>
+                                    <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({...newVessel, oblDate: e.target.value})} className="w-full border p-4 rounded-2xl bg-slate-50 font-bold h-[58px] focus:ring-2 focus:ring-blue-500 outline-none" required />
                                 </div>
                                 <button type="submit" className="bg-blue-600 text-white px-6 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow-xl transition-all active:scale-95 h-[58px]"><PlusCircle size={20} /> Abrir Pasta</button>
                             </form>
                         </div>
 
-                        {/* Navegação de Abas */}
-                        <div className="flex gap-4 border-b border-slate-200 no-print px-2">
-                            <button onClick={() => { setActiveTab('open'); setSelectedShipments(new Set()); }} className={`px-8 py-4 text-sm font-bold border-b-4 transition-all ${activeTab === 'open' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Operacional</button>
-                            <button onClick={() => { setActiveTab('closed'); setSelectedShipments(new Set()); }} className={`px-8 py-4 text-sm font-bold border-b-4 transition-all ${activeTab === 'closed' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Histórico</button>
+                        {/* Navegação de Abas e Parâmetros de Filtro/Agrupamento */}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-200 no-print px-2">
+                            <div className="flex gap-2">
+                                <button onClick={() => { setActiveTab('open'); setSelectedShipments(new Set()); }} className={`px-6 py-4 text-sm font-bold border-b-4 transition-all ${activeTab === 'open' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Operacional</button>
+                                <button onClick={() => { setActiveTab('closed'); setSelectedShipments(new Set()); }} className={`px-6 py-4 text-sm font-bold border-b-4 transition-all ${activeTab === 'closed' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Histórico</button>
+                                <button onClick={() => { setActiveTab('archive'); setSelectedShipments(new Set()); }} className={`px-6 py-4 text-sm font-bold border-b-4 transition-all ${activeTab === 'archive' ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Arquivo</button>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 mb-2">
+                                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
+                                    <Filter size={14} className="text-blue-500" />
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Agrupar por:</span>
+                                    <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="text-xs font-bold text-blue-600 outline-none bg-transparent cursor-pointer">
+                                        <option value="port">Por Porto</option>
+                                        <option value="month">Por Mês</option>
+                                        <option value="quarter">Por Trimestre</option>
+                                        <option value="year">Por Ano</option>
+                                        <option value="range">Intervalo Personalizado</option>
+                                    </select>
+                                </div>
+
+                                {groupBy === 'range' && (
+                                    <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-2xl border border-blue-100 shadow-sm animate-in slide-in-from-right-2 duration-300">
+                                        <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-xs font-bold text-blue-700 outline-none" />
+                                        <span className="text-[10px] font-black text-blue-300">A</span>
+                                        <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-xs font-bold text-blue-700 outline-none" />
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Listagem em Grupos */}
-                        <div className="space-y-10">
+                        {/* Listagem em Grupos Colapsáveis */}
+                        <div className="space-y-10 pb-20">
                             {Object.keys(groups).length > 0 ? Object.keys(groups).sort((a,b) => b.localeCompare(a)).map(gName => {
                                 const isCollapsed = collapsedGroups[gName];
                                 const groupShips = groups[gName];
                                 return (
-                                    <div key={gName} className={`group-section bg-white border border-slate-200 rounded-[2rem] shadow-sm overflow-hidden animate-in fade-in duration-500 ${isCollapsed ? 'opacity-70' : ''}`}>
+                                    <div key={gName} className={`group-section bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden animate-in fade-in duration-500 ${isCollapsed ? 'opacity-70' : ''}`}>
                                         <div className="group-header bg-slate-50/80 px-8 py-4 border-b flex justify-between items-center backdrop-blur-sm print:bg-slate-100">
-                                            <h3 onClick={() => setCollapsedGroups(p => ({...p, [gName]: !p[gName]}))} className="text-xs font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-3 cursor-pointer group">
+                                            <h3 onClick={() => setCollapsedGroups(p => ({...p, [gName]: !p[gName]}))} className="text-[11px] font-black uppercase text-slate-500 tracking-[0.2em] flex items-center gap-3 cursor-pointer group select-none">
                                                 {isCollapsed ? <ChevronRight size={18} className="text-blue-500" /> : <ChevronDown size={18} className="text-blue-500" />}
-                                                {activeTab === 'open' || closedGroupBy === 'port' ? <MapPin size={16} /> : <Calendar size={16} />}
+                                                {groupBy === 'port' ? <MapPin size={16} /> : <Calendar size={16} />}
                                                 {gName}
                                             </h3>
-                                            <span className="bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-[10px] font-black uppercase">{groupShips.length} Atendimentos</span>
+                                            <span className="bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{groupShips.length} Atendimentos</span>
                                         </div>
                                         {!isCollapsed && (
                                             <div className="overflow-x-auto custom-scrollbar">
                                                 <table className="w-full text-left">
                                                     <thead>
                                                         <tr className="bg-slate-50/30 text-[10px] uppercase font-black text-slate-400 tracking-widest border-b border-slate-100">
-                                                            <th className="p-6 w-12 no-print"></th><th className="p-6 w-64">Embarcação</th><th className="p-6 w-32 text-center">Data OBL</th>
-                                                            {processes.map(p => <th key={p.id} className="p-6 text-center">{p.name}</th>)}
-                                                            <th className="p-6 text-center no-print w-40 action-col">Acções</th>
+                                                            <th className="p-6 w-12 no-print text-center">Sel.</th>
+                                                            <th className="p-6 w-64">Embarcação / AT</th>
+                                                            <th className="p-6 w-32 text-center">Data OBL</th>
+                                                            {processes.map(p => <th key={p.id} className="p-6 text-center">{p.name} (Tópicos)</th>)}
+                                                            <th className="p-6 text-center no-print w-48 action-col">Gestão</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-50">
@@ -534,14 +590,14 @@ export default function App() {
                                                             const prog = calculateProgress(ship);
                                                             const isSelected = selectedShipments.has(ship.id);
                                                             return (
-                                                                <tr key={ship.id} className={`hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}>
-                                                                    <td className="p-6 no-print">
+                                                                <tr key={ship.id} className={`hover:bg-slate-50/50 transition-colors ${isSelected ? 'bg-blue-50/30 selected-row' : ''}`}>
+                                                                    <td className="p-6 no-print text-center">
                                                                         <button onClick={() => {
                                                                             const next = new Set(selectedShipments);
                                                                             if (next.has(ship.id)) next.delete(ship.id); else next.add(ship.id);
                                                                             setSelectedShipments(next);
                                                                         }} className="text-slate-300 hover:text-blue-600 transition-all">
-                                                                            {isSelected ? <CheckSquare className="text-blue-600" size={20} /> : <Square size={20} />}
+                                                                            {isSelected ? <CheckSquare className="text-blue-600" size={22} /> : <Square size={22} />}
                                                                         </button>
                                                                     </td>
                                                                     <td className="p-6">
@@ -549,7 +605,7 @@ export default function App() {
                                                                             <div className="ship-icon-box p-3 rounded-2xl shadow-sm bg-blue-50 text-blue-600 print:hidden"><Ship size={20} /></div>
                                                                             <div>
                                                                                 <div className="vessel-name font-black text-[13px] uppercase text-slate-800 tracking-tight">{ship.vessel}</div>
-                                                                                <div className="vessel-ref text-[10px] text-blue-600 font-bold font-mono uppercase mt-1">{(ship.serviceNum || "")}</div>
+                                                                                <div className="vessel-ref text-[10px] text-blue-600 font-bold font-mono uppercase mt-1">{(ship.serviceNum || "S/ REF")}</div>
                                                                             </div>
                                                                         </div>
                                                                         <div className="mt-4 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden progress-bar">
@@ -557,7 +613,7 @@ export default function App() {
                                                                         </div>
                                                                     </td>
                                                                     <td className="p-4 text-center">
-                                                                        <input type="date" disabled={activeTab === 'closed'} value={ship.oblDate || ""} onChange={async (e) => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { oblDate: e.target.value })} className="bg-transparent text-[10px] font-black text-slate-700 outline-none w-full text-center hover:bg-slate-100 p-2 rounded-lg cursor-pointer" />
+                                                                        <input type="date" disabled={activeTab === 'archive'} value={ship.oblDate || ""} onChange={async (e) => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { oblDate: e.target.value })} className="bg-transparent text-[10px] font-black text-slate-700 outline-none w-full text-center hover:bg-slate-100 p-2 rounded-lg cursor-pointer" />
                                                                     </td>
                                                                     {processes.map(p => {
                                                                         const rawStatus = ship.status?.[p.id];
@@ -569,12 +625,13 @@ export default function App() {
                                                                                 </div>
                                                                                 <div className="no-print">
                                                                                     <MultiSelectCell 
+                                                                                        processName={p.name}
                                                                                         options={p.options || []}
                                                                                         selected={rawStatus}
-                                                                                        disabled={activeTab === 'closed'}
+                                                                                        disabled={activeTab === 'archive'}
                                                                                         onChange={async (newVal) => {
                                                                                             await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { [`status.${p.id}`]: newVal });
-                                                                                            logAction("UPDATE_MARKERS", `${ship.vessel}: ${p.name} -> [${newVal.join(', ')}]`);
+                                                                                            logAction("UPDATE_TÓPICOS", `${ship.vessel}: ${p.name} -> [${newVal.join(', ')}]`);
                                                                                         }}
                                                                                     />
                                                                                 </div>
@@ -587,10 +644,43 @@ export default function App() {
                                                                                 <MessageSquare size={18} />
                                                                                 {ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] font-bold px-1 rounded-full">{ship.comments.length}</span>}
                                                                             </button>
-                                                                            <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: !ship.isClosed, closedAt: !ship.isClosed ? Date.now() : null })} className={`p-3 rounded-xl transition-all shadow-sm ${activeTab === 'open' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                                                {activeTab === 'open' ? <CheckCircle size={18} /> : <RefreshCcw size={18} />}
-                                                                            </button>
-                                                                            <button onClick={async () => { if(window.confirm(`Eliminar ${ship.vessel}?`)) await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id)); }} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white shadow-sm transition-all"><Trash size={18} /></button>
+
+                                                                            {activeTab === 'open' && (
+                                                                                <button onClick={async () => {
+                                                                                    await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: true, closedAt: Date.now() });
+                                                                                    logAction("FECHAR_PASTA", `Navio ${ship.vessel} movido para Histórico`);
+                                                                                }} className="p-3 rounded-xl bg-green-50 text-green-700 border border-green-100 hover:bg-green-600 hover:text-white transition-all shadow-sm">
+                                                                                    <CheckCircle size={18} />
+                                                                                </button>
+                                                                            )}
+
+                                                                            {activeTab === 'closed' && (
+                                                                                <>
+                                                                                    <button onClick={async () => {
+                                                                                        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: false, closedAt: null });
+                                                                                        logAction("REABRIR_PASTA", `Navio ${ship.vessel} reaberto para Operacional`);
+                                                                                    }} className="p-3 rounded-xl bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                                                                        <RotateCcw size={18} />
+                                                                                    </button>
+                                                                                    <button onClick={async () => {
+                                                                                        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: true });
+                                                                                        logAction("ARQUIVAR", `Navio ${ship.vessel} movido para o Arquivo`);
+                                                                                    }} className="p-3 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-600 hover:text-white transition-all shadow-sm" title="Arquivar Definitivamente">
+                                                                                        <Archive size={18} />
+                                                                                    </button>
+                                                                                </>
+                                                                            )}
+
+                                                                            {activeTab === 'archive' && (
+                                                                                <button onClick={async () => {
+                                                                                    await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: false });
+                                                                                    logAction("DESARQUIVAR", `Navio ${ship.vessel} movido de volta para Histórico`);
+                                                                                }} className="p-3 rounded-xl bg-slate-50 text-slate-700 border border-slate-100 hover:bg-slate-600 hover:text-white transition-all shadow-sm">
+                                                                                    <RotateCcw size={18} />
+                                                                                </button>
+                                                                            )}
+
+                                                                            <button onClick={async () => { if(window.confirm(`Eliminar permanentemente ${ship.vessel}?`)) await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id)); }} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white shadow-sm transition-all border border-red-50"><Trash size={18} /></button>
                                                                         </div>
                                                                     </td>
                                                                 </tr>
@@ -602,41 +692,57 @@ export default function App() {
                                         )}
                                     </div>
                                 );
-                            }) : <div className="h-96 flex flex-col items-center justify-center opacity-40"><Anchor size={64} className="animate-pulse text-slate-300" /></div>}
+                            }) : (
+                                <div className="h-96 flex flex-col items-center justify-center opacity-40 gap-4">
+                                    <Anchor size={64} className="animate-pulse text-slate-300" />
+                                    <p className="font-black uppercase tracking-widest text-xs text-slate-400">Sem registos nesta categoria</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
             </main>
 
-            {/* Painel de Comentários */}
+            {/* Painel de Observações */}
             {activeShipComment && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col h-[600px] max-h-[90vh] overflow-hidden border border-white animate-in slide-in-from-bottom-8">
-                        <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-                            <div><h3 className="text-xl font-bold uppercase">{activeShipComment.vessel}</h3><p className="text-blue-400 text-xs font-bold mt-1 uppercase">Notas de Campo</p></div>
-                            <button onClick={() => setActiveShipComment(null)} className="p-2 hover:bg-red-500 rounded-full transition-colors"><X size={24} /></button>
+                    <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl flex flex-col h-[650px] max-h-[90vh] overflow-hidden border border-white animate-in slide-in-from-bottom-8">
+                        <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
+                            <div className="z-10">
+                                <h3 className="text-xl font-bold uppercase tracking-tight">{activeShipComment.vessel}</h3>
+                                <p className="text-blue-400 text-[10px] font-black mt-1 uppercase tracking-[0.2em]">Caderno de Observações</p>
+                            </div>
+                            <button onClick={() => setActiveShipComment(null)} className="z-10 p-2 bg-slate-800 rounded-full hover:bg-red-500 transition-colors"><X size={24} /></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar bg-slate-50/50">
                             {(activeShipComment.comments || []).sort((a,b) => b.timestamp - a.timestamp).map(comm => (
-                                <div key={comm.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 space-y-2 animate-in slide-in-from-right-4">
-                                    <div className="flex justify-between text-[9px] font-black text-slate-400 uppercase">
-                                        <span className="text-blue-600">{comm.user.split('@')[0]}</span>
-                                        <span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span>
+                                <div key={comm.id} className="bg-white p-5 rounded-[2rem] shadow-sm border border-slate-100 space-y-3 animate-in slide-in-from-right-4">
+                                    <div className="flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        <div className="flex items-center gap-2 text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">
+                                            <User size={10} /> <span>{comm.user.split('@')[0]}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <Clock size={10} /> <span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span>
+                                        </div>
                                     </div>
-                                    <p className="text-sm text-slate-600 font-medium leading-relaxed">{comm.text}</p>
+                                    <p className="text-[13px] text-slate-600 font-medium leading-relaxed">{comm.text}</p>
                                 </div>
                             ))}
                         </div>
-                        <div className="p-8 bg-white border-t no-print">
+                        <div className="p-8 bg-white border-t border-slate-100 no-print">
                             <div className="relative group">
-                                <textarea value={newCommentText} onChange={e => setNewCommentText(e.target.value)} placeholder="Inserir nova observação..." className="w-full p-5 pb-16 bg-slate-50 border rounded-3xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium resize-none transition-all" rows="3" />
-                                <button onClick={handleAddComment} disabled={!newCommentText.trim()} className="absolute bottom-4 right-4 bg-blue-600 text-white p-3 rounded-2xl shadow-lg hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2"><Send size={18} /><span className="text-xs font-bold">Gravar</span></button>
+                                <textarea value={newCommentText} onChange={e => setNewCommentText(e.target.value)} placeholder="Escrever nota importante..." className="w-full p-5 pb-16 bg-slate-50 border border-slate-200 rounded-[2rem] outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium resize-none transition-all focus:bg-white" rows="3" />
+                                <button onClick={handleAddComment} disabled={!newCommentText.trim()} className="absolute bottom-4 right-4 bg-blue-600 text-white p-3 rounded-2xl shadow-xl hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2 active:scale-95 shadow-blue-600/20"><Send size={18} /><span className="text-xs font-bold uppercase tracking-widest">Registar</span></button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-            <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-[6px] text-slate-400 text-center py-2 border-t bg-white">Logística Vale S.A. | DocControl Pro | Base OBL</footer>
+            
+            <footer className="hidden print:block fixed bottom-0 left-0 right-0 text-[6px] text-slate-400 text-center py-2 border-t bg-white uppercase font-bold tracking-widest">
+                Logística Vale S.A. | DocControl Pro | Filtros Aplicados via Pesquisa e Intervalo OBL
+            </footer>
         </div>
     );
 }
