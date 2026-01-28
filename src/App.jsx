@@ -282,34 +282,20 @@ export default function App() {
                 // Normalizador para comparação segura
                 const norm = (s) => String(s || "").trim().toUpperCase();
 
-                // Verifica existência do SILOG
+                // Verifica existência do SILOG e insere se não existir
                 const silogIdx = currentProcesses.findIndex(p => norm(p.name) === "SILOG");
                 const mercanteIdx = currentProcesses.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
 
                 if (silogIdx === -1) {
                     const newSilog = { id: "silog", name: "SILOG", options: ["CADASTRO", "ANÚNCIO"] };
-                    // Se Mercantes existe, insere logo após, senão no fim
+                    // Se Mercantes existe, insere logo após, senão no fim, apenas na criação inicial
                     if (mercanteIdx !== -1) currentProcesses.splice(mercanteIdx + 1, 0, newSilog);
                     else currentProcesses.push(newSilog);
                     
                     await updateDoc(configRef, { processes: currentProcesses });
-                } else {
-                    // LÓGICA DE REORDENAÇÃO FORÇADA PARA VISUALIZAÇÃO
-                    if (mercanteIdx !== -1 && silogIdx !== -1) {
-                        // Cria uma cópia sem o SILOG
-                        const processesWithoutSilog = currentProcesses.filter((_, idx) => idx !== silogIdx);
-                        const silogItem = currentProcesses[silogIdx];
-                        
-                        // Encontra o novo índice de Mercantes na lista limpa
-                        const newMercanteIdx = processesWithoutSilog.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
-                        
-                        // Insere SILOG imediatamente após Mercantes
-                        if (newMercanteIdx !== -1) {
-                            processesWithoutSilog.splice(newMercanteIdx + 1, 0, silogItem);
-                            currentProcesses = processesWithoutSilog;
-                        }
-                    }
                 }
+                // REMOVIDO: A lógica 'else' que forçava a reordenação a cada atualização foi removida.
+                // Agora a ordem respeita estritamente o que está salvo no array 'processes' do Firestore.
 
                 setPorts(data.ports || []);
                 setProcesses(currentProcesses);
