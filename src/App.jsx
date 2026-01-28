@@ -172,6 +172,9 @@ export default function App() {
 
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
+    
+    // Novo estado para edição de terminais
+    const [editingPort, setEditingPort] = useState({ index: null, value: "" });
 
     const exportMenuRef = useRef(null);
 
@@ -240,6 +243,24 @@ export default function App() {
         updatedPorts.splice(index, 1);
         await updatePortsConfig(updatedPorts);
         logAction("EXCLUIR_TERMINAL", `Terminal ${portName} excluído`);
+    };
+
+    // Nova função de edição de porto
+    const handleSaveEditPort = async () => {
+        if (editingPort.index === null || !editingPort.value.trim()) {
+            setEditingPort({ index: null, value: "" });
+            return;
+        }
+        const updatedPorts = [...ports];
+        const oldName = updatedPorts[editingPort.index];
+        const newName = editingPort.value.trim().toUpperCase();
+        
+        if (oldName !== newName) {
+            updatedPorts[editingPort.index] = newName;
+            await updatePortsConfig(updatedPorts);
+            logAction("EDITAR_TERMINAL", `Terminal alterado de ${oldName} para ${newName}`);
+        }
+        setEditingPort({ index: null, value: "" });
     };
 
     const handleAddShipment = async (e) => {
@@ -536,10 +557,23 @@ export default function App() {
                                     <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
                                         {ports.map((p, idx) => (
                                             <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
-                                                <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(p)}</span>
+                                                {editingPort.index === idx ? (
+                                                    <input 
+                                                        autoFocus
+                                                        className="flex-1 text-[9px] font-bold outline-none uppercase bg-slate-50 border-b border-blue-500"
+                                                        value={editingPort.value}
+                                                        onChange={e => setEditingPort({...editingPort, value: e.target.value})}
+                                                        onBlur={handleSaveEditPort}
+                                                        onKeyDown={e => e.key === 'Enter' && handleSaveEditPort()}
+                                                    />
+                                                ) : (
+                                                    <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(p)}</span>
+                                                )}
+                                                
                                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                                     <button onClick={() => handleMovePort(idx, -1)} className="text-slate-400 hover:text-blue-600"><ArrowUp size={10}/></button>
                                                     <button onClick={() => handleMovePort(idx, 1)} className="text-slate-400 hover:text-blue-600"><ArrowDown size={10}/></button>
+                                                    <button onClick={() => setEditingPort({ index: idx, value: p })} className="text-amber-500 hover:text-amber-700"><Edit2 size={10}/></button>
                                                     <button onClick={() => handleDeletePort(idx)} className="text-red-500 hover:text-red-700"><Trash size={10}/></button>
                                                 </div>
                                             </div>
