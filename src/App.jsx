@@ -55,6 +55,7 @@ const normalizeStatus = (val) => {
 
 /**
  * Componente de Seleção Múltipla Compacto
+ * Altura ajustada para exibir até 5 linhas (aprox. 120px)
  */
 const MultiSelectCell = ({ options, selected, onChange, disabled, processName }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -110,11 +111,11 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
             </button>
 
             {isOpen && !disabled && (
-                <div className="absolute z-[100] mt-1 w-full min-w-[160px] bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 animate-in fade-in zoom-in-95 duration-200 left-0">
+                <div className="relative mt-1 w-full min-w-[140px] bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 animate-in fade-in zoom-in-95 duration-200 z-10">
                     <div className="p-1 border-b border-slate-50 mb-1">
                         <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">{String(processName)}</p>
                     </div>
-                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-0.5">
+                    <div className="max-h-[120px] overflow-y-auto custom-scrollbar space-y-0.5">
                         {options.map(opt => {
                             const isChecked = currentSelected.includes(opt);
                             return (
@@ -128,7 +129,7 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
                                         ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'}`}>
                                         {isChecked && <Check size={8} strokeWidth={4} />}
                                     </div>
-                                    <span className={`text-[9px] font-bold uppercase ${isChecked ? 'text-blue-700' : 'text-slate-600'}`}>
+                                    <span className={`text-[9px] font-bold uppercase whitespace-normal leading-tight ${isChecked ? 'text-blue-700' : 'text-slate-600'}`}>
                                         {String(opt)}
                                     </span>
                                 </div>
@@ -167,14 +168,13 @@ export default function App() {
     const [logs, setLogs] = useState([]);
     const [formPort, setFormPort] = useState("");
     const [newVessel, setNewVessel] = useState({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
-    const [newPortName, setNewPortName] = useState('');
     
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
 
     const exportMenuRef = useRef(null);
 
-    // --- MANIPULADORES (DEFINIDOS NO INÍCIO DO COMPONENTE PARA EVITAR REFERENCEERROR) ---
+    // --- MANIPULADORES ---
     const logAction = async (action, details) => {
         if (!auth.currentUser) return;
         try {
@@ -270,6 +270,7 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
+    // CONFIG EFFECT - ORDENAÇÃO DE COLUNAS
     useEffect(() => {
         if (!user) return;
         const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
@@ -277,14 +278,37 @@ export default function App() {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let currentProcesses = data.processes || [];
-                const silogIdx = currentProcesses.findIndex(p => p.name === "SILOG");
-                const mercanteIdx = currentProcesses.findIndex(p => p.name === "PROCEDIMENTOS MERCANTES");
+                
+                // Normalizador para comparação segura
+                const norm = (s) => String(s || "").trim().toUpperCase();
+
+                // Verifica existência do SILOG
+                const silogIdx = currentProcesses.findIndex(p => norm(p.name) === "SILOG");
+                const mercanteIdx = currentProcesses.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
 
                 if (silogIdx === -1) {
                     const newSilog = { id: "silog", name: "SILOG", options: ["CADASTRO", "ANÚNCIO"] };
+                    // Se Mercantes existe, insere logo após, senão no fim
                     if (mercanteIdx !== -1) currentProcesses.splice(mercanteIdx + 1, 0, newSilog);
                     else currentProcesses.push(newSilog);
+                    
                     await updateDoc(configRef, { processes: currentProcesses });
+                } else {
+                    // LÓGICA DE REORDENAÇÃO FORÇADA PARA VISUALIZAÇÃO
+                    if (mercanteIdx !== -1 && silogIdx !== -1) {
+                        // Cria uma cópia sem o SILOG
+                        const processesWithoutSilog = currentProcesses.filter((_, idx) => idx !== silogIdx);
+                        const silogItem = currentProcesses[silogIdx];
+                        
+                        // Encontra o novo índice de Mercantes na lista limpa
+                        const newMercanteIdx = processesWithoutSilog.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
+                        
+                        // Insere SILOG imediatamente após Mercantes
+                        if (newMercanteIdx !== -1) {
+                            processesWithoutSilog.splice(newMercanteIdx + 1, 0, silogItem);
+                            currentProcesses = processesWithoutSilog;
+                        }
+                    }
                 }
 
                 setPorts(data.ports || []);
@@ -496,7 +520,7 @@ export default function App() {
                                                 <button onClick={() => handleMoveProcess(pIdx, 1)} className="p-1 bg-white border rounded text-slate-400"><ArrowRight size={10}/></button>
                                             </div>
                                         </div>
-                                        <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-48 pr-1 mb-3">
+                                        <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
                                             {proc.options?.map((opt, idx) => (
                                                 <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
                                                     {editingTopic.processId === proc.id && editingTopic.index === idx ? (
@@ -588,15 +612,16 @@ export default function App() {
                                                 <tr className="bg-slate-50/20 text-[7px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                                                     <th className="p-1.5 w-[3%] text-center">SEL.</th>
                                                     <th className="p-1.5 w-[14%]">EMBARCAÇÃO / AT</th>
-                                                    <th className="p-1.5 w-[7%] text-center">DATA OBL</th>
+                                                    {/* Processos Dinâmicos - SILOG será o segundo se ordenado corretamente */}
                                                     {processes.map(p => <th key={p.id} className="p-1.5 text-center w-[12%]">{String(p.name)}</th>)}
+                                                    <th className="p-1.5 w-[7%] text-center">DATA OBL</th>
                                                     <th className="p-1.5 text-center w-[10%] no-print">GESTÃO</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
                                                 {groups[gName].map(ship => (
                                                     <tr key={ship.id} className={`hover:bg-slate-50/50 transition-colors ${selectedShipments.has(ship.id) ? 'bg-blue-50/30' : ''}`}>
-                                                        <td className="p-1 text-center no-print">
+                                                        <td className="p-1 text-center no-print align-top">
                                                             <button onClick={() => {
                                                                 const next = new Set(selectedShipments);
                                                                 if (next.has(ship.id)) next.delete(ship.id); else next.add(ship.id);
@@ -605,7 +630,7 @@ export default function App() {
                                                                 {selectedShipments.has(ship.id) ? <CheckSquare size={14} className="text-blue-600" /> : <Square size={14} />}
                                                             </button>
                                                         </td>
-                                                        <td className="p-1">
+                                                        <td className="p-1 align-top">
                                                             <div className="min-w-0">
                                                                 <div className="font-black text-[9px] uppercase text-slate-800 truncate tracking-tight">{String(ship.vessel)}</div>
                                                                 <div className="text-[7px] text-blue-600 font-bold font-mono truncate">{String(ship.serviceNum || "")}</div>
@@ -614,15 +639,15 @@ export default function App() {
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        <td className="p-1 text-center">
-                                                            <span className="text-[8px] font-black text-slate-500">{String(ship.oblDate || "-")}</span>
-                                                        </td>
                                                         {processes.map(p => (
-                                                            <td key={p.id} className="p-1 text-center">
+                                                            <td key={p.id} className="p-1 text-center align-top">
                                                                 <MultiSelectCell processName={p.name} options={p.options || []} selected={ship.status?.[p.id]} disabled={activeTab === 'archive'} onChange={async (newVal) => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { [`status.${p.id}`]: newVal })} />
                                                             </td>
                                                         ))}
-                                                        <td className="p-1 text-center no-print">
+                                                        <td className="p-1 text-center align-top">
+                                                            <span className="text-[8px] font-black text-slate-500">{String(ship.oblDate || "-")}</span>
+                                                        </td>
+                                                        <td className="p-1 text-center no-print align-top">
                                                             <div className="flex gap-1 justify-center">
                                                                 <button onClick={() => setActiveShipComment(ship)} className={`p-1 rounded bg-slate-50 text-slate-400 relative ${ship.comments?.length > 0 ? 'bg-amber-50 text-amber-600' : ''}`}><MessageSquare size={12}/>{ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[6px] px-0.5 rounded-full">{ship.comments.length}</span>}</button>
                                                                 <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: true, closedAt: Date.now() })} className="p-1 rounded bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all"><CheckCircle size={12}/></button>
