@@ -168,7 +168,8 @@ export default function App() {
     const [logs, setLogs] = useState([]);
     const [formPort, setFormPort] = useState("");
     const [newVessel, setNewVessel] = useState({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
-    
+    const [newMasterPort, setNewMasterPort] = useState(""); 
+
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
 
@@ -202,6 +203,43 @@ export default function App() {
     const handleLogout = () => {
         logAction("LOGOUT", "Utilizador saiu do sistema");
         signOut(auth);
+    };
+
+    // --- FUNÇÕES DE PORTOS (Master) ---
+    const updatePortsConfig = async (updatedPorts) => {
+        const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
+        await updateDoc(configRef, { ports: updatedPorts });
+    };
+
+    const handleAddPortMaster = async () => {
+        if (!newMasterPort.trim()) return;
+        const name = newMasterPort.trim().toUpperCase();
+        try {
+            const updatedPorts = [...ports];
+            if (!updatedPorts.includes(name)) {
+                updatedPorts.push(name);
+                await updatePortsConfig(updatedPorts);
+                logAction("CRIAR_TERMINAL_MASTER", `Terminal ${name} criado via Master`);
+            }
+            setNewMasterPort("");
+        } catch (e) { console.error(e); }
+    };
+
+    const handleMovePort = async (index, direction) => {
+        const updatedPorts = [...ports];
+        const targetIdx = index + direction;
+        if (targetIdx < 0 || targetIdx >= updatedPorts.length) return;
+        [updatedPorts[index], updatedPorts[targetIdx]] = [updatedPorts[targetIdx], updatedPorts[index]];
+        await updatePortsConfig(updatedPorts);
+    };
+
+    const handleDeletePort = async (index) => {
+        const portName = ports[index];
+        if (!confirm(`Excluir terminal ${portName}?`)) return;
+        const updatedPorts = [...ports];
+        updatedPorts.splice(index, 1);
+        await updatePortsConfig(updatedPorts);
+        logAction("EXCLUIR_TERMINAL", `Terminal ${portName} excluído`);
     };
 
     const handleAddShipment = async (e) => {
@@ -270,7 +308,7 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    // CONFIG EFFECT - ORDENAÇÃO DE COLUNAS
+    // CONFIG EFFECT
     useEffect(() => {
         if (!user) return;
         const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
@@ -279,24 +317,17 @@ export default function App() {
                 const data = docSnap.data();
                 let currentProcesses = data.processes || [];
                 
-                // Normalizador para comparação segura
                 const norm = (s) => String(s || "").trim().toUpperCase();
-
-                // Verifica existência do SILOG e insere se não existir
                 const silogIdx = currentProcesses.findIndex(p => norm(p.name) === "SILOG");
                 const mercanteIdx = currentProcesses.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
 
                 if (silogIdx === -1) {
                     const newSilog = { id: "silog", name: "SILOG", options: ["CADASTRO", "ANÚNCIO"] };
-                    // Se Mercantes existe, insere logo após, senão no fim, apenas na criação inicial
                     if (mercanteIdx !== -1) currentProcesses.splice(mercanteIdx + 1, 0, newSilog);
                     else currentProcesses.push(newSilog);
-                    
                     await updateDoc(configRef, { processes: currentProcesses });
                 }
-                // REMOVIDO: A lógica 'else' que forçava a reordenação a cada atualização foi removida.
-                // Agora a ordem respeita estritamente o que está salvo no array 'processes' do Firestore.
-
+                
                 setPorts(data.ports || []);
                 setProcesses(currentProcesses);
                 if (data.ports?.length > 0 && !formPort) setFormPort(data.ports[0]);
@@ -327,7 +358,7 @@ export default function App() {
         return () => unsubscribe();
     }, [user, viewMode]);
 
-    // --- FUNÇÕES MASTER ---
+    // --- FUNÇÕES MASTER (PROCESSOS) ---
     const updateConfig = async (newProcesses) => {
         const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
         try {
@@ -497,6 +528,29 @@ export default function App() {
                         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                             <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><Settings2 className="text-blue-500" /> Configuração Master</h2>
                             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {/* NOVO CARD DE TERMINAIS */}
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col h-full ring-2 ring-blue-100">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-black text-[9px] text-blue-600 uppercase tracking-widest flex items-center gap-1"><MapPin size={10}/> TERMINAIS / PORTOS</h3>
+                                    </div>
+                                    <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
+                                        {ports.map((p, idx) => (
+                                            <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
+                                                <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(p)}</span>
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                    <button onClick={() => handleMovePort(idx, -1)} className="text-slate-400 hover:text-blue-600"><ArrowUp size={10}/></button>
+                                                    <button onClick={() => handleMovePort(idx, 1)} className="text-slate-400 hover:text-blue-600"><ArrowDown size={10}/></button>
+                                                    <button onClick={() => handleDeletePort(idx)} className="text-red-500 hover:text-red-700"><Trash size={10}/></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="relative">
+                                        <input className="w-full p-2 pr-8 bg-white border border-slate-200 rounded-xl text-[9px] font-bold uppercase" placeholder="Novo Terminal..." value={newMasterPort} onChange={e => setNewMasterPort(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddPortMaster()} />
+                                        <button onClick={handleAddPortMaster} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12}/></button>
+                                    </div>
+                                </div>
+
                                 {processes.map((proc, pIdx) => (
                                     <div key={proc.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col h-full">
                                         <div className="flex justify-between items-center mb-3">
