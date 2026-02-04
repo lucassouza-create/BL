@@ -173,8 +173,9 @@ export default function App() {
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
     
-    // Novo estado para edição de terminais
+    // Novo estado para edição de terminais e comentários
     const [editingPort, setEditingPort] = useState({ index: null, value: "" });
+    const [editingComment, setEditingComment] = useState({ id: null, text: "" });
 
     const exportMenuRef = useRef(null);
 
@@ -263,6 +264,15 @@ export default function App() {
         setEditingPort({ index: null, value: "" });
     };
 
+    // --- MANIPULAÇÃO DE DATAS ---
+    const handleDateUpdate = async (shipId, field, value) => {
+        try {
+            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', shipId), {
+                [field]: value
+            });
+        } catch (e) { console.error("Erro ao atualizar data", e); }
+    };
+
     const handleAddShipment = async (e) => {
         if (e) e.preventDefault();
         if (!newVessel.serviceNum || !newVessel.vesselName || !user) return;
@@ -277,6 +287,8 @@ export default function App() {
                 serviceNum: String(newVessel.serviceNum),
                 vessel: String(newVessel.vesselName).toUpperCase(),
                 oblDate: String(newVessel.oblDate),
+                finalDraftSentDate: '', 
+                finalDraftApprovedDate: '', 
                 status: initialStatus,
                 comments: [],
                 isClosed: false,
@@ -287,6 +299,7 @@ export default function App() {
         } catch (err) { console.error(err); }
     };
 
+    // --- COMENTÁRIOS ---
     const handleAddComment = async () => {
         if (!newCommentText.trim() || !activeShipComment || !user) return;
         const newComment = { 
@@ -302,6 +315,36 @@ export default function App() {
             });
             setNewCommentText("");
             setActiveShipComment({...activeShipComment, comments: updatedComments});
+        } catch (err) { console.error(err); }
+    };
+
+    const handleDeleteComment = async (commentId) => {
+        if (!activeShipComment || !user) return;
+        if (!confirm("Excluir este comentário?")) return;
+
+        const updatedComments = activeShipComment.comments.filter(c => c.id !== commentId);
+        
+        try {
+            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
+                comments: updatedComments
+            });
+            setActiveShipComment({ ...activeShipComment, comments: updatedComments });
+        } catch (err) { console.error(err); }
+    };
+
+    const handleSaveEditComment = async () => {
+        if (!editingComment.id || !editingComment.text.trim() || !activeShipComment) return;
+
+        const updatedComments = activeShipComment.comments.map(c => 
+            c.id === editingComment.id ? { ...c, text: editingComment.text.trim() } : c
+        );
+
+        try {
+            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
+                comments: updatedComments
+            });
+            setActiveShipComment({ ...activeShipComment, comments: updatedComments });
+            setEditingComment({ id: null, text: "" });
         } catch (err) { console.error(err); }
     };
 
@@ -493,10 +536,10 @@ export default function App() {
         if (format === 'spreadsheet-pdf') { setIsCompactMode(true); setIsExportMenuOpen(false); return; }
         const dataToExport = selectedShipments.size > 0 ? shipments.filter(s => selectedShipments.has(s.id)) : filteredAndSearched;
         if (format === 'csv' || format === 'excel') {
-            let content = "Porto;Navio;Referência;Data OBL;Progresso;Marcadores\n";
+            let content = "Porto;Navio;Referência;Data OBL;Envio Draft;Aprov. Draft;Progresso;Marcadores\n";
             dataToExport.forEach(s => {
                 const markers = processes.map(p => `${p.name}: ${normalizeStatus(s.status?.[p.id]).filter(o => p.options.includes(o)).join(', ')}`).join(' | ');
-                content += `${s.port};${s.vessel};${s.serviceNum};${s.oblDate || '-'};${calculateProgress(s)}%;${markers}\n`;
+                content += `${s.port};${s.vessel};${s.serviceNum};${s.oblDate || '-'};${s.finalDraftSentDate || '-'};${s.finalDraftApprovedDate || '-'};${calculateProgress(s)}%;${markers}\n`;
             });
             const blob = new Blob([content], { type: format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
@@ -688,6 +731,8 @@ export default function App() {
                                                     <th className="p-1.5 w-[14%]">EMBARCAÇÃO / AT</th>
                                                     {/* Processos Dinâmicos - SILOG será o segundo se ordenado corretamente */}
                                                     {processes.map(p => <th key={p.id} className="p-1.5 text-center w-[12%]">{String(p.name)}</th>)}
+                                                    <th className="p-1.5 w-[8%] text-center">ENVIO DRAFT</th>
+                                                    <th className="p-1.5 w-[8%] text-center">APROV. DRAFT</th>
                                                     <th className="p-1.5 w-[7%] text-center">DATA OBL</th>
                                                     <th className="p-1.5 text-center w-[10%] no-print">GESTÃO</th>
                                                 </tr>
@@ -719,7 +764,28 @@ export default function App() {
                                                             </td>
                                                         ))}
                                                         <td className="p-1 text-center align-top">
-                                                            <span className="text-[8px] font-black text-slate-500">{String(ship.oblDate || "-")}</span>
+                                                            <input 
+                                                                type="date" 
+                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
+                                                                value={ship.finalDraftSentDate || ""}
+                                                                onChange={(e) => handleDateUpdate(ship.id, 'finalDraftSentDate', e.target.value)}
+                                                            />
+                                                        </td>
+                                                        <td className="p-1 text-center align-top">
+                                                            <input 
+                                                                type="date" 
+                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
+                                                                value={ship.finalDraftApprovedDate || ""}
+                                                                onChange={(e) => handleDateUpdate(ship.id, 'finalDraftApprovedDate', e.target.value)}
+                                                            />
+                                                        </td>
+                                                        <td className="p-1 text-center align-top">
+                                                            <input 
+                                                                type="date" 
+                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-500 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
+                                                                value={ship.oblDate || ""}
+                                                                onChange={(e) => handleDateUpdate(ship.id, 'oblDate', e.target.value)}
+                                                            />
                                                         </td>
                                                         <td className="p-1 text-center no-print align-top">
                                                             <div className="flex gap-1 justify-center">
@@ -750,8 +816,36 @@ export default function App() {
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50/50">
                             {(activeShipComment.comments || []).sort((a,b) => b.timestamp - a.timestamp).map(comm => (
                                 <div key={comm.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-2">
-                                    <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase"><span className="text-blue-600">{String(comm.user).split('@')[0]}</span><span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span></div>
-                                    <p className="text-xs text-slate-600 font-medium">{String(comm.text)}</p>
+                                    {editingComment.id === comm.id ? (
+                                        <div className="flex flex-col gap-2">
+                                            <textarea 
+                                                value={editingComment.text} 
+                                                onChange={e => setEditingComment({...editingComment, text: e.target.value})}
+                                                className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-medium resize-none focus:bg-white outline-none ring-2 ring-blue-500"
+                                                rows="3"
+                                            />
+                                            <div className="flex gap-2 justify-end">
+                                                <button onClick={() => setEditingComment({id: null, text: ""})} className="text-xs text-slate-500 hover:text-slate-700 font-bold">Cancelar</button>
+                                                <button onClick={handleSaveEditComment} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-bold">Salvar</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase">
+                                                <span className="text-blue-600">{String(comm.user).split('@')[0]}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span>
+                                                    {comm.user === user.email && (
+                                                        <div className="flex gap-1">
+                                                            <button onClick={() => setEditingComment({ id: comm.id, text: comm.text })} className="hover:text-blue-600 transition-colors"><Edit2 size={10} /></button>
+                                                            <button onClick={() => handleDeleteComment(comm.id)} className="hover:text-red-500 transition-colors"><Trash size={10} /></button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-slate-600 font-medium whitespace-pre-wrap">{String(comm.text)}</p>
+                                        </>
+                                    )}
                                 </div>
                             ))}
                         </div>
