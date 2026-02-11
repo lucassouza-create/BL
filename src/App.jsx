@@ -54,16 +54,12 @@ const normalizeStatus = (val) => {
 };
 
 /**
- * Componente de Seleção Múltipla Compacto
- * Altura ajustada para exibir até 5 linhas (aprox. 120px)
+ * Componente de Seleção Múltipla Compacto com Cores
  */
 const MultiSelectCell = ({ options, selected, onChange, disabled, processName }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
-    
-    const currentSelected = useMemo(() => 
-        normalizeStatus(selected).filter(s => options.includes(s)),
-    [selected, options]);
+    const currentSelected = normalizeStatus(selected).filter(s => options.includes(s));
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -90,13 +86,9 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
     const isLastOptionSelected = hasSelection && currentSelected.includes(options[options.length - 1]);
     
     let colorClass = "";
-    if (!hasSelection) {
-        colorClass = "bg-red-50 text-red-600 border-red-100";
-    } else if (isLastOptionSelected) {
-        colorClass = "bg-green-50 text-green-700 border-green-200 shadow-sm shadow-green-100";
-    } else {
-        colorClass = "bg-yellow-50 text-yellow-700 border-yellow-200 shadow-sm shadow-yellow-100";
-    }
+    if (!hasSelection) colorClass = "bg-red-50 text-red-600 border-red-100";
+    else if (isLastOptionSelected) colorClass = "bg-green-50 text-green-700 border-green-200 shadow-sm shadow-green-100";
+    else colorClass = "bg-yellow-50 text-yellow-700 border-yellow-200 shadow-sm shadow-yellow-100";
 
     return (
         <div className="relative w-full" ref={containerRef}>
@@ -109,29 +101,20 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
                 <span className="truncate flex-1 uppercase text-left">{displayText}</span>
                 <ChevronDown size={8} className={`shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
-
             {isOpen && !disabled && (
-                <div className="relative mt-1 w-full min-w-[140px] bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 animate-in fade-in zoom-in-95 duration-200 z-10">
+                <div className="absolute z-[100] mt-1 w-full min-w-[160px] bg-white rounded-xl shadow-2xl border border-slate-200 p-1.5 animate-in fade-in zoom-in-95 duration-200 left-0">
                     <div className="p-1 border-b border-slate-50 mb-1">
                         <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">{String(processName)}</p>
                     </div>
-                    <div className="max-h-[120px] overflow-y-auto custom-scrollbar space-y-0.5">
+                    <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-0.5">
                         {options.map(opt => {
                             const isChecked = currentSelected.includes(opt);
                             return (
-                                <div 
-                                    key={opt} 
-                                    onClick={() => toggleOption(opt)}
-                                    className={`flex items-center gap-2 p-1 rounded-md cursor-pointer transition-all hover:bg-slate-50
-                                        ${isChecked ? 'bg-blue-50/50' : ''}`}
-                                >
-                                    <div className={`w-3 h-3 shrink-0 rounded border flex items-center justify-center transition-colors
-                                        ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'}`}>
+                                <div key={opt} onClick={() => toggleOption(opt)} className={`flex items-center gap-2 p-1 rounded-md cursor-pointer transition-all hover:bg-slate-50 ${isChecked ? 'bg-blue-50/50' : ''}`}>
+                                    <div className={`w-3 h-3 shrink-0 rounded border flex items-center justify-center transition-colors ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 bg-white'}`}>
                                         {isChecked && <Check size={8} strokeWidth={4} />}
                                     </div>
-                                    <span className={`text-[9px] font-bold uppercase whitespace-normal leading-tight ${isChecked ? 'text-blue-700' : 'text-slate-600'}`}>
-                                        {String(opt)}
-                                    </span>
+                                    <span className={`text-[9px] font-bold uppercase ${isChecked ? 'text-blue-700' : 'text-slate-600'}`}>{String(opt)}</span>
                                 </div>
                             );
                         })}
@@ -143,7 +126,7 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
 };
 
 export default function App() {
-    // --- ESTADOS GERAIS ---
+    // --- ESTADOS ---
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [email, setEmail] = useState("");
@@ -151,7 +134,10 @@ export default function App() {
     const [loginError, setLoginError] = useState("");
     const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [viewMode, setViewMode] = useState('user'); 
+    
+    // Abas principais: 'open' (Operacional), 'closed' (Histórico), 'obl' (Datas OBL), 'archive' (Arquivo)
     const [activeTab, setActiveTab] = useState('open'); 
+    
     const [groupBy, setGroupBy] = useState('port');
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -161,25 +147,19 @@ export default function App() {
     const [isCompactMode, setIsCompactMode] = useState(false);
     const [activeShipComment, setActiveShipComment] = useState(null);
     const [newCommentText, setNewCommentText] = useState("");
-
     const [ports, setPorts] = useState([]);
     const [processes, setProcesses] = useState([]);
     const [shipments, setShipments] = useState([]);
     const [logs, setLogs] = useState([]);
     const [formPort, setFormPort] = useState("");
     const [newVessel, setNewVessel] = useState({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
-    const [newMasterPort, setNewMasterPort] = useState(""); 
-
+    const [newPortName, setNewPortName] = useState('');
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
-    
-    // Novo estado para edição de terminais e comentários
-    const [editingPort, setEditingPort] = useState({ index: null, value: "" });
-    const [editingComment, setEditingComment] = useState({ id: null, text: "" });
 
     const exportMenuRef = useRef(null);
 
-    // --- MANIPULADORES ---
+    // --- MANIPULADORES PRINCIPAIS ---
     const logAction = async (action, details) => {
         if (!auth.currentUser) return;
         try {
@@ -189,7 +169,7 @@ export default function App() {
                 action: String(action),
                 details: String(details)
             });
-        } catch (e) { console.error("Erro ao gravar log", e); }
+        } catch (e) {}
     };
 
     const handleLogin = async (e) => {
@@ -205,72 +185,8 @@ export default function App() {
     };
 
     const handleLogout = () => {
-        logAction("LOGOUT", "Utilizador saiu do sistema");
+        logAction("LOGOUT", "Utilizador saiu");
         signOut(auth);
-    };
-
-    // --- FUNÇÕES DE PORTOS (Master) ---
-    const updatePortsConfig = async (updatedPorts) => {
-        const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
-        await updateDoc(configRef, { ports: updatedPorts });
-    };
-
-    const handleAddPortMaster = async () => {
-        if (!newMasterPort.trim()) return;
-        const name = newMasterPort.trim().toUpperCase();
-        try {
-            const updatedPorts = [...ports];
-            if (!updatedPorts.includes(name)) {
-                updatedPorts.push(name);
-                await updatePortsConfig(updatedPorts);
-                logAction("CRIAR_TERMINAL_MASTER", `Terminal ${name} criado via Master`);
-            }
-            setNewMasterPort("");
-        } catch (e) { console.error(e); }
-    };
-
-    const handleMovePort = async (index, direction) => {
-        const updatedPorts = [...ports];
-        const targetIdx = index + direction;
-        if (targetIdx < 0 || targetIdx >= updatedPorts.length) return;
-        [updatedPorts[index], updatedPorts[targetIdx]] = [updatedPorts[targetIdx], updatedPorts[index]];
-        await updatePortsConfig(updatedPorts);
-    };
-
-    const handleDeletePort = async (index) => {
-        const portName = ports[index];
-        if (!confirm(`Excluir terminal ${portName}?`)) return;
-        const updatedPorts = [...ports];
-        updatedPorts.splice(index, 1);
-        await updatePortsConfig(updatedPorts);
-        logAction("EXCLUIR_TERMINAL", `Terminal ${portName} excluído`);
-    };
-
-    // Nova função de edição de porto
-    const handleSaveEditPort = async () => {
-        if (editingPort.index === null || !editingPort.value.trim()) {
-            setEditingPort({ index: null, value: "" });
-            return;
-        }
-        const updatedPorts = [...ports];
-        const oldName = updatedPorts[editingPort.index];
-        const newName = editingPort.value.trim().toUpperCase();
-        
-        if (oldName !== newName) {
-            updatedPorts[editingPort.index] = newName;
-            await updatePortsConfig(updatedPorts);
-            logAction("EDITAR_TERMINAL", `Terminal alterado de ${oldName} para ${newName}`);
-        }
-        setEditingPort({ index: null, value: "" });
-    };
-
-    // --- MANIPULAÇÃO DE DATAS ---
-    const handleDateUpdate = async (shipId, field, value) => {
-        try {
-            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', shipId), {
-                [field]: value
-            });
-        } catch (e) { console.error("Erro ao atualizar data", e); }
     };
 
     const handleAddShipment = async (e) => {
@@ -278,7 +194,6 @@ export default function App() {
         if (!newVessel.serviceNum || !newVessel.vesselName || !user) return;
         const initialStatus = {};
         processes.forEach(p => initialStatus[p.id] = []);
-        
         try {
             await addDoc(collection(db, 'artifacts', APP_ID, DATA_PATH, 'shipments'), {
                 createdAt: Date.now(),
@@ -287,83 +202,28 @@ export default function App() {
                 serviceNum: String(newVessel.serviceNum),
                 vessel: String(newVessel.vesselName).toUpperCase(),
                 oblDate: String(newVessel.oblDate),
-                finalDraftSentDate: '', 
-                finalDraftApprovedDate: '', 
                 status: initialStatus,
                 comments: [],
                 isClosed: false,
                 isArchived: false
             });
-            logAction("CRIAR_NAVIO", `Navio ${newVessel.vesselName.toUpperCase()} criado em ${formPort}`);
+            logAction("CRIAR", `Navio ${newVessel.vesselName} em ${formPort}`);
             setNewVessel({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
-        } catch (err) { console.error(err); }
+        } catch (err) {}
     };
 
-    // --- COMENTÁRIOS ---
     const handleAddComment = async () => {
         if (!newCommentText.trim() || !activeShipComment || !user) return;
-        const newComment = { 
-            id: Date.now(), 
-            text: String(newCommentText).trim(), 
-            timestamp: Date.now(), 
-            user: String(user.email) 
-        };
+        const newComment = { id: Date.now(), text: String(newCommentText).trim(), timestamp: Date.now(), user: String(user.email) };
         const updatedComments = [...(activeShipComment.comments || []), newComment];
         try {
-            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), { 
-                comments: updatedComments 
-            });
+            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), { comments: updatedComments });
             setNewCommentText("");
             setActiveShipComment({...activeShipComment, comments: updatedComments});
-        } catch (err) { console.error(err); }
+        } catch (err) {}
     };
 
-    const handleDeleteComment = async (commentId) => {
-        if (!activeShipComment || !user) return;
-        if (!confirm("Excluir este comentário?")) return;
-
-        const updatedComments = activeShipComment.comments.filter(c => c.id !== commentId);
-        
-        try {
-            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
-                comments: updatedComments
-            });
-            setActiveShipComment({ ...activeShipComment, comments: updatedComments });
-        } catch (err) { console.error(err); }
-    };
-
-    const handleSaveEditComment = async () => {
-        if (!editingComment.id || !editingComment.text.trim() || !activeShipComment) return;
-
-        const updatedComments = activeShipComment.comments.map(c => 
-            c.id === editingComment.id ? { ...c, text: editingComment.text.trim() } : c
-        );
-
-        try {
-            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
-                comments: updatedComments
-            });
-            setActiveShipComment({ ...activeShipComment, comments: updatedComments });
-            setEditingComment({ id: null, text: "" });
-        } catch (err) { console.error(err); }
-    };
-
-    // --- EFEITOS E LISTENERS ---
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (exportMenuRef.current && !exportMenuRef.current.contains(event.target)) setIsExportMenuOpen(false);
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    useEffect(() => {
-        if (isCompactMode) {
-            window.print();
-            setTimeout(() => setIsCompactMode(false), 500);
-        }
-    }, [isCompactMode]);
-
+    // --- FIREBASE LISTENERS ---
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
             setUser(currentUser);
@@ -372,7 +232,6 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    // CONFIG EFFECT
     useEffect(() => {
         if (!user) return;
         const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
@@ -380,18 +239,12 @@ export default function App() {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let currentProcesses = data.processes || [];
-                
-                const norm = (s) => String(s || "").trim().toUpperCase();
-                const silogIdx = currentProcesses.findIndex(p => norm(p.name) === "SILOG");
-                const mercanteIdx = currentProcesses.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
-
-                if (silogIdx === -1) {
-                    const newSilog = { id: "silog", name: "SILOG", options: ["CADASTRO", "ANÚNCIO"] };
-                    if (mercanteIdx !== -1) currentProcesses.splice(mercanteIdx + 1, 0, newSilog);
-                    else currentProcesses.push(newSilog);
+                const silogIdx = currentProcesses.findIndex(p => p.name === "SILOG");
+                const mercanteIdx = currentProcesses.findIndex(p => p.name === "PROCEDIMENTOS MERCANTES");
+                if (silogIdx === -1 && mercanteIdx !== -1) {
+                    currentProcesses.splice(mercanteIdx + 1, 0, { id: "silog", name: "SILOG", options: ["CADASTRO", "ANÚNCIO"] });
                     await updateDoc(configRef, { processes: currentProcesses });
                 }
-                
                 setPorts(data.ports || []);
                 setProcesses(currentProcesses);
                 if (data.ports?.length > 0 && !formPort) setFormPort(data.ports[0]);
@@ -409,80 +262,7 @@ export default function App() {
         return () => unsubscribe();
     }, [user]);
 
-    useEffect(() => {
-        if (!user || viewMode !== 'master') return;
-        const logsRef = collection(db, 'artifacts', APP_ID, DATA_PATH, 'logs');
-        const unsubscribe = onSnapshot(query(logsRef), (snapshot) => {
-            const sortedLogs = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .sort((a, b) => b.timestamp - a.timestamp)
-                .slice(0, 50);
-            setLogs(sortedLogs);
-        });
-        return () => unsubscribe();
-    }, [user, viewMode]);
-
-    // --- FUNÇÕES MASTER (PROCESSOS) ---
-    const updateConfig = async (newProcesses) => {
-        const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
-        try {
-            await updateDoc(configRef, { processes: newProcesses });
-            logAction("CONFIG_COLUNAS", "Alteração na estrutura de colunas");
-        } catch (e) {}
-    };
-
-    const handleMoveProcess = (index, direction) => {
-        const newProcesses = [...processes];
-        const targetIdx = index + direction;
-        if (targetIdx < 0 || targetIdx >= newProcesses.length) return;
-        [newProcesses[index], newProcesses[targetIdx]] = [newProcesses[targetIdx], newProcesses[index]];
-        updateConfig(newProcesses);
-    };
-
-    const handleMoveTopic = (processId, index, direction) => {
-        const newProcesses = [...processes];
-        const pIdx = newProcesses.findIndex(p => p.id === processId);
-        const options = [...newProcesses[pIdx].options];
-        const targetIdx = index + direction;
-        if (targetIdx < 0 || targetIdx >= options.length) return;
-        [options[index], options[targetIdx]] = [options[targetIdx], options[index]];
-        newProcesses[pIdx].options = options;
-        updateConfig(newProcesses);
-    };
-
-    const handleDeleteTopic = (processId, index) => {
-        if (!confirm("Deseja excluir este tópico?")) return;
-        const newProcesses = [...processes];
-        const pIdx = newProcesses.findIndex(p => p.id === processId);
-        const options = [...newProcesses[pIdx].options];
-        options.splice(index, 1);
-        newProcesses[pIdx].options = options;
-        updateConfig(newProcesses);
-    };
-
-    const handleSaveEditTopic = () => {
-        if (!editingTopic.value.trim()) return;
-        const newProcesses = [...processes];
-        const pIdx = newProcesses.findIndex(p => p.id === editingTopic.processId);
-        const options = [...newProcesses[pIdx].options];
-        options[editingTopic.index] = editingTopic.value.trim().toUpperCase();
-        newProcesses[pIdx].options = options;
-        updateConfig(newProcesses);
-        setEditingTopic({ processId: null, index: null, value: "" });
-    };
-
-    const handleAddTopic = (processId) => {
-        if (!newTopic.value.trim() || newTopic.processId !== processId) return;
-        const newProcesses = [...processes];
-        const pIdx = newProcesses.findIndex(p => p.id === processId);
-        const options = [...(newProcesses[pIdx].options || [])];
-        options.push(newTopic.value.trim().toUpperCase());
-        newProcesses[pIdx].options = options;
-        updateConfig(newProcesses);
-        setNewTopic({ processId: null, value: "" });
-    };
-
-    // --- CÁLCULOS ---
+    // --- FILTRAGEM E AGRUPAMENTO ---
     const calculateProgress = (ship) => {
         if (!processes || processes.length === 0) return 0;
         let total = 0, acquired = 0;
@@ -494,13 +274,21 @@ export default function App() {
         return total === 0 ? 0 : Math.round((acquired / total) * 100);
     };
 
-    // --- FILTRAGEM ---
     const filteredAndSearched = useMemo(() => {
         let base = shipments;
-        if (activeTab === 'open') base = base.filter(s => !s.isClosed && !s.isArchived);
-        else if (activeTab === 'closed') base = base.filter(s => s.isClosed && !s.isArchived);
-        else if (activeTab === 'archive') base = base.filter(s => s.isArchived);
         
+        // Lógica de Abas
+        if (activeTab === 'open') {
+            base = base.filter(s => !s.isClosed && !s.isArchived);
+        } else if (activeTab === 'closed') {
+            base = base.filter(s => s.isClosed && !s.isArchived);
+        } else if (activeTab === 'obl') {
+            base = base.filter(s => !s.isArchived); // Visão geral baseada em OBL
+        } else if (activeTab === 'archive') {
+            base = base.filter(s => s.isArchived);
+        }
+
+        // Filtro de Data
         if (groupBy === 'range' && dateRange.start && dateRange.end) {
             const start = new Date(dateRange.start).getTime();
             const end = new Date(dateRange.end).getTime() + 86400000;
@@ -509,12 +297,13 @@ export default function App() {
                 return shipDate >= start && shipDate <= end;
             });
         }
-        return base.filter(s => {
-            const search = searchTerm.toLowerCase();
-            return String(s.vessel || "").toLowerCase().includes(search) || 
-                   String(s.serviceNum || "").toLowerCase().includes(search) || 
-                   String(s.port || "").toLowerCase().includes(search);
-        });
+
+        const search = searchTerm.toLowerCase();
+        return base.filter(s => 
+            String(s.vessel || "").toLowerCase().includes(search) || 
+            String(s.serviceNum || "").toLowerCase().includes(search) ||
+            String(s.port || "").toLowerCase().includes(search)
+        );
     }, [shipments, activeTab, searchTerm, groupBy, dateRange]);
 
     const groups = useMemo(() => {
@@ -522,24 +311,87 @@ export default function App() {
         filteredAndSearched.forEach(ship => {
             const refDate = ship.oblDate ? new Date(ship.oblDate) : new Date(ship.closedAt || ship.createdAt);
             let groupName = "OUTROS";
-            if (groupBy === 'port') groupName = String(ship.port || "Sem Porto");
-            else if (groupBy === 'month') groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
-            else if (groupBy === 'year') groupName = `ANO ${refDate.getFullYear()}`;
-            else if (groupBy === 'range') groupName = `OBL: ${new Date(dateRange.start).toLocaleDateString('pt-PT')} A ${new Date(dateRange.end).toLocaleDateString('pt-PT')}`;
+            
+            // Agrupamento Padrão por Aba
+            if (activeTab === 'open') {
+                // Na aba Operacional, agrupa por PORTO (padrão)
+                if (groupBy === 'range') groupName = `PERÍODO: ${new Date(dateRange.start).toLocaleDateString()} A ${new Date(dateRange.end).toLocaleDateString()}`;
+                else groupName = String(ship.port || "Sem Porto");
+            } else if (activeTab === 'obl') {
+                 // Na aba OBL, agrupa pela DATA OBL (Mês/Ano)
+                 groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
+            } else {
+                // Histórico e Arquivo agrupa por Mês/Ano ou critério selecionado
+                if (groupBy === 'port') groupName = String(ship.port || "Sem Porto");
+                else if (groupBy === 'year') groupName = `ANO ${refDate.getFullYear()}`;
+                else groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
+            }
+            
             if (!g[groupName]) g[groupName] = [];
             g[groupName].push(ship);
         });
         return g;
-    }, [filteredAndSearched, groupBy, dateRange]);
+    }, [filteredAndSearched, activeTab, groupBy, dateRange]);
+
+    // --- FUNÇÕES MASTER ---
+    const updateConfig = async (newProcesses) => {
+        const configRef = doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main');
+        await updateDoc(configRef, { processes: newProcesses });
+    };
+
+    const handleMoveProcess = async (index, direction) => {
+        const newProcesses = [...processes];
+        const targetIdx = index + direction;
+        if (targetIdx < 0 || targetIdx >= newProcesses.length) return;
+        [newProcesses[index], newProcesses[targetIdx]] = [newProcesses[targetIdx], newProcesses[index]];
+        updateConfig(newProcesses);
+    };
+
+    const handleMoveTopic = async (processId, index, direction) => {
+        const newProcesses = [...processes];
+        const pIdx = newProcesses.findIndex(p => p.id === processId);
+        const options = [...newProcesses[pIdx].options];
+        const targetIdx = index + direction;
+        if (targetIdx < 0 || targetIdx >= options.length) return;
+        [options[index], options[targetIdx]] = [options[targetIdx], options[index]];
+        newProcesses[pIdx].options = options;
+        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { processes: newProcesses });
+    };
+
+    const handleDeleteTopic = async (processId, index) => {
+        if (!confirm("Remover tópico?")) return;
+        const newProcesses = [...processes];
+        const pIdx = newProcesses.findIndex(p => p.id === processId);
+        newProcesses[pIdx].options.splice(index, 1);
+        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { processes: newProcesses });
+    };
+
+    const handleSaveEditTopic = async () => {
+        if (!editingTopic.value.trim()) return;
+        const newProcesses = [...processes];
+        const pIdx = newProcesses.findIndex(p => p.id === editingTopic.processId);
+        newProcesses[pIdx].options[editingTopic.index] = editingTopic.value.trim().toUpperCase();
+        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { processes: newProcesses });
+        setEditingTopic({ processId: null, index: null, value: "" });
+    };
+
+    const handleAddTopic = async (processId) => {
+        if (!newTopic.value.trim()) return;
+        const newProcesses = [...processes];
+        const pIdx = newProcesses.findIndex(p => p.id === processId);
+        newProcesses[pIdx].options.push(newTopic.value.trim().toUpperCase());
+        await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'config', 'main'), { processes: newProcesses });
+        setNewTopic({ processId: null, value: "" });
+    };
 
     const handleExport = (format) => {
         if (format === 'spreadsheet-pdf') { setIsCompactMode(true); setIsExportMenuOpen(false); return; }
         const dataToExport = selectedShipments.size > 0 ? shipments.filter(s => selectedShipments.has(s.id)) : filteredAndSearched;
         if (format === 'csv' || format === 'excel') {
-            let content = "Porto;Navio;Referência;Data OBL;Envio Draft;Aprov. Draft;Progresso;Marcadores\n";
+            let content = "Porto;Navio;Referência;Data OBL;Progresso;Itens Selecionados\n";
             dataToExport.forEach(s => {
                 const markers = processes.map(p => `${p.name}: ${normalizeStatus(s.status?.[p.id]).filter(o => p.options.includes(o)).join(', ')}`).join(' | ');
-                content += `${s.port};${s.vessel};${s.serviceNum};${s.oblDate || '-'};${s.finalDraftSentDate || '-'};${s.finalDraftApprovedDate || '-'};${calculateProgress(s)}%;${markers}\n`;
+                content += `${s.port};${s.vessel};${s.serviceNum};${s.oblDate || '-'};${calculateProgress(s)}%;${markers}\n`;
             });
             const blob = new Blob([content], { type: format === 'excel' ? 'application/vnd.ms-excel' : 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
@@ -573,6 +425,24 @@ export default function App() {
 
     return (
         <div className={`min-h-screen flex flex-col bg-slate-50 font-sans text-slate-900 overflow-x-hidden ${isCompactMode ? 'compact-active' : ''}`}>
+            <style>{`
+                @media print {
+                    @page { size: A4 portrait; margin: 5mm; }
+                    body { background: white !important; color: black !important; -webkit-print-color-adjust: exact; }
+                    .no-print { display: none !important; }
+                    .print-only { display: block !important; }
+                    .main-container { padding: 0 !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+                    .group-section { break-inside: avoid; border: 1px solid #000; margin-bottom: 10px; border-radius: 0; page-break-inside: avoid; }
+                    table { width: 100% !important; border-collapse: collapse; table-layout: fixed; }
+                    th, td { border: 1px solid #000; padding: 4px !important; overflow: hidden; text-overflow: ellipsis; font-size: 8px !important; }
+                    th { background-color: #f0f0f0 !important; font-weight: bold; }
+                    .compact-active table { font-size: 6px !important; }
+                    .compact-active th, .compact-active td { padding: 2px !important; height: 12px; }
+                    .progress-bar { display: none !important; }
+                    .unselected-group { display: none !important; }
+                }
+            `}</style>
+
             <header className="bg-slate-900 text-white p-3 px-6 shadow-xl flex justify-between items-center z-50 sticky top-0 no-print">
                 <div className="flex items-center gap-3">
                     <Ship size={18} className="text-blue-500" />
@@ -589,45 +459,10 @@ export default function App() {
             <main className="flex-1 p-2 md:p-4 max-w-full mx-auto w-full">
                 {viewMode === 'master' ? (
                     <div className="space-y-4 animate-in fade-in duration-500">
+                        {/* Painel Master */}
                         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                             <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><Settings2 className="text-blue-500" /> Configuração Master</h2>
                             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                {/* NOVO CARD DE TERMINAIS */}
-                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col h-full ring-2 ring-blue-100">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <h3 className="font-black text-[9px] text-blue-600 uppercase tracking-widest flex items-center gap-1"><MapPin size={10}/> TERMINAIS / PORTOS</h3>
-                                    </div>
-                                    <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
-                                        {ports.map((p, idx) => (
-                                            <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
-                                                {editingPort.index === idx ? (
-                                                    <input 
-                                                        autoFocus
-                                                        className="flex-1 text-[9px] font-bold outline-none uppercase bg-slate-50 border-b border-blue-500"
-                                                        value={editingPort.value}
-                                                        onChange={e => setEditingPort({...editingPort, value: e.target.value})}
-                                                        onBlur={handleSaveEditPort}
-                                                        onKeyDown={e => e.key === 'Enter' && handleSaveEditPort()}
-                                                    />
-                                                ) : (
-                                                    <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(p)}</span>
-                                                )}
-                                                
-                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                                    <button onClick={() => handleMovePort(idx, -1)} className="text-slate-400 hover:text-blue-600"><ArrowUp size={10}/></button>
-                                                    <button onClick={() => handleMovePort(idx, 1)} className="text-slate-400 hover:text-blue-600"><ArrowDown size={10}/></button>
-                                                    <button onClick={() => setEditingPort({ index: idx, value: p })} className="text-amber-500 hover:text-amber-700"><Edit2 size={10}/></button>
-                                                    <button onClick={() => handleDeletePort(idx)} className="text-red-500 hover:text-red-700"><Trash size={10}/></button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="relative">
-                                        <input className="w-full p-2 pr-8 bg-white border border-slate-200 rounded-xl text-[9px] font-bold uppercase" placeholder="Novo Terminal..." value={newMasterPort} onChange={e => setNewMasterPort(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddPortMaster()} />
-                                        <button onClick={handleAddPortMaster} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12}/></button>
-                                    </div>
-                                </div>
-
                                 {processes.map((proc, pIdx) => (
                                     <div key={proc.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col h-full">
                                         <div className="flex justify-between items-center mb-3">
@@ -637,7 +472,7 @@ export default function App() {
                                                 <button onClick={() => handleMoveProcess(pIdx, 1)} className="p-1 bg-white border rounded text-slate-400"><ArrowRight size={10}/></button>
                                             </div>
                                         </div>
-                                        <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
+                                        <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-48 pr-1 mb-3">
                                             {proc.options?.map((opt, idx) => (
                                                 <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
                                                     {editingTopic.processId === proc.id && editingTopic.index === idx ? (
@@ -664,26 +499,6 @@ export default function App() {
                                 ))}
                             </div>
                         </div>
-
-                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><ClipboardList className="text-blue-500" /> Log de Auditoria</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-slate-50 text-slate-400 uppercase text-[9px] font-black">
-                                        <tr><th className="p-3">Data</th><th className="p-3">Usuário</th><th className="p-3">Ação</th></tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {logs.map(log => (
-                                            <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                                                <td className="p-3 font-mono text-[9px] whitespace-nowrap">{new Date(log.timestamp).toLocaleString('pt-PT')}</td>
-                                                <td className="p-3 font-bold text-blue-600 text-[9px]">{String(log.user)}</td>
-                                                <td className="p-3 text-slate-500 text-[9px]">{String(log.details)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
                     </div>
                 ) : (
                     <div className="space-y-3">
@@ -691,117 +506,137 @@ export default function App() {
                             <div className="flex flex-col md:flex-row gap-2 items-center">
                                 <div className="flex-1 relative w-full">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                    <input type="text" placeholder="Pesquisa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-[10px] font-medium" />
+                                    <input type="text" placeholder="Navio ou AT..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-[10px] font-medium" />
                                     {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500"><X size={14} /></button>}
                                 </div>
                                 <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-slate-800 text-[10px] uppercase tracking-tighter shrink-0"><Download size={12} /> Exportar</button>
                             </div>
 
                             <form onSubmit={handleAddShipment} className="grid grid-cols-1 md:grid-cols-4 gap-2 border-t border-slate-50 pt-2">
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Terminal</label>
-                                    <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-1.5 border rounded-md bg-slate-50 font-bold outline-none text-[10px] h-8">{ports.map(p => <option key={String(p)} value={String(p)}>{String(p)}</option>)}</select>
+                                <div className="flex flex-col"><label className="text-[7px] font-black text-slate-400 uppercase">Terminal</label>
+                                    <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-1.5 border rounded bg-slate-50 font-bold outline-none text-[10px] h-8">{ports.map(p => <option key={String(p)} value={String(p)}>{String(p)}</option>)}</select>
                                 </div>
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Navio & AT</label>
-                                    <div className="flex gap-1 h-8"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-14 border p-1.5 rounded-md bg-slate-50 font-bold text-[10px]" required />
-                                        <input type="text" placeholder="Navio" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="flex-1 border p-1.5 rounded-md uppercase bg-slate-50 font-bold text-[10px]" required />
+                                <div className="flex flex-col"><label className="text-[7px] font-black text-slate-400 uppercase">Navio & AT</label>
+                                    <div className="flex gap-1 h-8"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-14 border p-1.5 rounded bg-slate-50 font-bold text-[10px]" required />
+                                        <input type="text" placeholder="Nome" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="flex-1 border p-1.5 rounded uppercase bg-slate-50 font-bold text-[10px]" required />
                                     </div>
                                 </div>
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Data OBL</label>
-                                    <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({...newVessel, oblDate: e.target.value})} className="w-full border p-1.5 rounded-md bg-slate-50 font-bold text-[10px] h-8" required />
+                                <div className="flex flex-col"><label className="text-[7px] font-black text-slate-400 uppercase">Data OBL</label>
+                                    <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({...newVessel, oblDate: e.target.value})} className="w-full border p-1.5 rounded bg-slate-50 font-bold text-[10px] h-8" required />
                                 </div>
-                                <button type="submit" className="bg-blue-600 text-white font-black rounded-lg hover:bg-blue-700 h-8 text-[9px] uppercase mt-auto tracking-widest transition-all active:scale-95">Abrir Pasta</button>
+                                <button type="submit" className="bg-blue-600 text-white font-black rounded hover:bg-blue-700 h-8 text-[9px] uppercase mt-auto">Abrir Pasta</button>
                             </form>
                         </div>
 
-                        {activeTab === 'open' && groups && Object.keys(groups).length > 0 && Object.keys(groups).sort((a,b) => b.localeCompare(a)).map(gName => (
-                            <div key={gName} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                                <div className="bg-slate-50/50 px-4 py-1.5 border-b flex justify-between items-center">
-                                    <div onClick={() => setCollapsedGroups(p => ({...p, [gName]: !p[gName]}))} className="cursor-pointer flex items-center gap-2">
-                                        {collapsedGroups[gName] ? <ChevronRight size={14} className="text-blue-500" /> : <ChevronDown size={14} className="text-blue-500" />}
-                                        <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{String(gName)}</span>
-                                    </div>
-                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em]">{groups[gName].length} ITENS</span>
+                        {/* Navegação Principal */}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-200 no-print px-1">
+                            <div className="flex gap-1">
+                                <button onClick={() => { setActiveTab('open'); setSelectedShipments(new Set()); }} className={`px-4 py-2.5 text-[10px] font-black border-b-2 transition-all uppercase whitespace-nowrap ${activeTab === 'open' ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-400'}`}>OPERACIONAL</button>
+                                <button onClick={() => { setActiveTab('closed'); setSelectedShipments(new Set()); }} className={`px-4 py-2.5 text-[10px] font-black border-b-2 transition-all uppercase whitespace-nowrap ${activeTab === 'closed' ? 'border-green-600 text-green-700' : 'border-transparent text-slate-400'}`}>HISTÓRICO</button>
+                                <button onClick={() => { setActiveTab('obl'); setSelectedShipments(new Set()); }} className={`px-4 py-2.5 text-[10px] font-black border-b-2 transition-all uppercase whitespace-nowrap ${activeTab === 'obl' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-400'}`}>DATAS OBL</button>
+                                <button onClick={() => { setActiveTab('archive'); setSelectedShipments(new Set()); }} className={`px-4 py-2.5 text-[10px] font-black border-b-2 transition-all uppercase whitespace-nowrap ${activeTab === 'archive' ? 'border-amber-600 text-amber-700' : 'border-transparent text-slate-400'}`}>ARQUIVO</button>
+                            </div>
+                            
+                            {/* Filtros Dinâmicos */}
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                                    <Filter size={12} className="text-blue-500" />
+                                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-tighter">AGRUPAR:</span>
+                                    <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="text-[10px] font-bold text-blue-600 outline-none bg-transparent cursor-pointer uppercase">
+                                        {activeTab === 'open' ? (
+                                            <>
+                                                <option value="port">POR PORTO</option>
+                                                <option value="range">INTERVALO OBL</option>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <option value="month">POR MÊS</option>
+                                                <option value="port">POR PORTO</option>
+                                                <option value="year">POR ANO</option>
+                                                <option value="range">INTERVALO OBL</option>
+                                            </>
+                                        )}
+                                    </select>
                                 </div>
-                                {!collapsedGroups[gName] && (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left table-fixed">
-                                            <thead>
-                                                <tr className="bg-slate-50/20 text-[7px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                                                    <th className="p-1.5 w-[3%] text-center">SEL.</th>
-                                                    <th className="p-1.5 w-[14%]">EMBARCAÇÃO / AT</th>
-                                                    {/* Processos Dinâmicos - SILOG será o segundo se ordenado corretamente */}
-                                                    {processes.map(p => <th key={p.id} className="p-1.5 text-center w-[12%]">{String(p.name)}</th>)}
-                                                    <th className="p-1.5 w-[8%] text-center">ENVIO DRAFT</th>
-                                                    <th className="p-1.5 w-[8%] text-center">APROV. DRAFT</th>
-                                                    <th className="p-1.5 w-[7%] text-center">DATA OBL</th>
-                                                    <th className="p-1.5 text-center w-[10%] no-print">GESTÃO</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-50">
-                                                {groups[gName].map(ship => (
-                                                    <tr key={ship.id} className={`hover:bg-slate-50/50 transition-colors ${selectedShipments.has(ship.id) ? 'bg-blue-50/30' : ''}`}>
-                                                        <td className="p-1 text-center no-print align-top">
-                                                            <button onClick={() => {
-                                                                const next = new Set(selectedShipments);
-                                                                if (next.has(ship.id)) next.delete(ship.id); else next.add(ship.id);
-                                                                setSelectedShipments(next);
-                                                            }} className="text-slate-300 hover:text-blue-600">
-                                                                {selectedShipments.has(ship.id) ? <CheckSquare size={14} className="text-blue-600" /> : <Square size={14} />}
-                                                            </button>
-                                                        </td>
-                                                        <td className="p-1 align-top">
-                                                            <div className="min-w-0">
-                                                                <div className="font-black text-[9px] uppercase text-slate-800 truncate tracking-tight">{String(ship.vessel)}</div>
-                                                                <div className="text-[7px] text-blue-600 font-bold font-mono truncate">{String(ship.serviceNum || "")}</div>
-                                                                <div className="mt-1 w-full bg-slate-100 h-0.5 rounded-full overflow-hidden">
-                                                                    <div className={`h-full transition-all duration-1000 ${calculateProgress(ship) === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{width: `${calculateProgress(ship)}%`}}></div>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        {processes.map(p => (
-                                                            <td key={p.id} className="p-1 text-center align-top">
-                                                                <MultiSelectCell processName={p.name} options={p.options || []} selected={ship.status?.[p.id]} disabled={activeTab === 'archive'} onChange={async (newVal) => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { [`status.${p.id}`]: newVal })} />
-                                                            </td>
-                                                        ))}
-                                                        <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
-                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
-                                                                value={ship.finalDraftSentDate || ""}
-                                                                onChange={(e) => handleDateUpdate(ship.id, 'finalDraftSentDate', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
-                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
-                                                                value={ship.finalDraftApprovedDate || ""}
-                                                                onChange={(e) => handleDateUpdate(ship.id, 'finalDraftApprovedDate', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
-                                                                className="w-full bg-transparent text-[8px] font-bold text-slate-500 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
-                                                                value={ship.oblDate || ""}
-                                                                onChange={(e) => handleDateUpdate(ship.id, 'oblDate', e.target.value)}
-                                                            />
-                                                        </td>
-                                                        <td className="p-1 text-center no-print align-top">
-                                                            <div className="flex gap-1 justify-center">
-                                                                <button onClick={() => setActiveShipComment(ship)} className={`p-1 rounded bg-slate-50 text-slate-400 relative ${ship.comments?.length > 0 ? 'bg-amber-50 text-amber-600' : ''}`}><MessageSquare size={12}/>{ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[6px] px-0.5 rounded-full">{ship.comments.length}</span>}</button>
-                                                                <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: true, closedAt: Date.now() })} className="p-1 rounded bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all"><CheckCircle size={12}/></button>
-                                                                <button onClick={async () => { if(confirm(`Eliminar ${ship.vessel}?`)) await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id)); }} className="p-1 rounded bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all"><Trash size={12}/></button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                {groupBy === 'range' && (
+                                    <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 animate-in slide-in-from-right-2">
+                                        <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-[10px] font-bold text-blue-700 outline-none" />
+                                        <span className="text-[9px] font-black text-blue-300">A</span>
+                                        <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-[10px] font-bold text-blue-700 outline-none" />
                                     </div>
                                 )}
                             </div>
-                        ))}
+                        </div>
+
+                        {/* Listagem */}
+                        <div className="space-y-4">
+                            {Object.keys(groups).sort((a,b) => b.localeCompare(a)).map(gName => (
+                                <div key={gName} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50/50 px-4 py-1.5 border-b flex justify-between items-center no-print">
+                                        <div onClick={() => setCollapsedGroups(p => ({...p, [gName]: !p[gName]}))} className="cursor-pointer flex items-center gap-2">
+                                            {collapsedGroups[gName] ? <ChevronRight size={14} className="text-blue-500" /> : <ChevronDown size={14} className="text-blue-500" />}
+                                            <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{String(gName)}</span>
+                                        </div>
+                                        <span className="text-[8px] font-bold text-slate-400 uppercase">{groups[gName].length} ITENS</span>
+                                    </div>
+                                    {!collapsedGroups[gName] && (
+                                        <table className="w-full text-left table-fixed border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-50/20 text-[7px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                                    <th className="p-1 w-[3%] text-center">SEL.</th>
+                                                    <th className="p-1 w-[14%]">EMBARCAÇÃO / AT</th>
+                                                    <th className="p-1 w-[7%] text-center">DATA OBL</th>
+                                                    {processes.map(p => <th key={p.id} className="p-1 text-center w-[12%]">{String(p.name)}</th>)}
+                                                    <th className="p-1 text-center w-[10%] no-print">GESTÃO</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {groups[gName].map(ship => {
+                                                    const prog = calculateProgress(ship);
+                                                    return (
+                                                        <tr key={ship.id} className={`hover:bg-slate-50/50 transition-colors ${selectedShipments.has(ship.id) ? 'bg-blue-50/30' : ''}`}>
+                                                            <td className="p-1 text-center no-print">
+                                                                <button onClick={() => {
+                                                                    const next = new Set(selectedShipments);
+                                                                    if (next.has(ship.id)) next.delete(ship.id); else next.add(ship.id);
+                                                                    setSelectedShipments(next);
+                                                                }} className="text-slate-300 hover:text-blue-600">{selectedShipments.has(ship.id) ? <CheckSquare size={14} /> : <Square size={14} />}</button>
+                                                            </td>
+                                                            <td className="p-1">
+                                                                <div className="min-w-0">
+                                                                    <div className="font-black text-[9px] uppercase text-slate-800 truncate tracking-tight">{String(ship.vessel)}</div>
+                                                                    <div className="text-[7px] text-blue-600 font-bold font-mono truncate">{String(ship.serviceNum || "")}</div>
+                                                                    <div className="mt-1 w-full bg-slate-100 h-0.5 rounded-full overflow-hidden"><div className={`h-full transition-all duration-1000 ${prog === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{width: `${prog}%`}}></div></div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-1 text-center"><span className="text-[8px] font-black text-slate-500">{String(ship.oblDate || "-")}</span></td>
+                                                            {processes.map(p => (
+                                                                <td key={p.id} className="p-1 text-center">
+                                                                    <MultiSelectCell processName={p.name} options={p.options || []} selected={ship.status?.[p.id]} disabled={activeTab === 'archive'} onChange={async (newVal) => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { [`status.${p.id}`]: newVal })} />
+                                                                </td>
+                                                            ))}
+                                                            <td className="p-1 text-center no-print">
+                                                                <div className="flex gap-1 justify-center">
+                                                                    <button onClick={() => setActiveShipComment(ship)} className={`p-1 rounded bg-slate-50 text-slate-400 relative ${ship.comments?.length > 0 ? 'bg-amber-50 text-amber-600' : ''}`}><MessageSquare size={12}/>{ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[6px] px-0.5 rounded-full">{ship.comments.length}</span>}</button>
+                                                                    {activeTab === 'archive' ? (
+                                                                        <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: false })} className="p-1 rounded bg-slate-50 text-slate-700" title="Restaurar"><RotateCcw size={12}/></button>
+                                                                    ) : ship.isClosed ? (
+                                                                        <><button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: false, closedAt: null })} className="p-1 rounded bg-blue-50 text-blue-600"><RotateCcw size={12}/></button><button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: true })} className="p-1 rounded bg-amber-50 text-amber-700"><Archive size={12}/></button></>
+                                                                    ) : (
+                                                                        <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: true, closedAt: Date.now() })} className="p-1 rounded bg-green-50 text-green-600"><CheckCircle size={12}/></button>
+                                                                    )}
+                                                                    <button onClick={async () => { if(confirm(`Eliminar ${ship.vessel}?`)) await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id)); }} className="p-1 rounded bg-red-50 text-red-400"><Trash size={12}/></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </main>
@@ -816,36 +651,8 @@ export default function App() {
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50/50">
                             {(activeShipComment.comments || []).sort((a,b) => b.timestamp - a.timestamp).map(comm => (
                                 <div key={comm.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-2">
-                                    {editingComment.id === comm.id ? (
-                                        <div className="flex flex-col gap-2">
-                                            <textarea 
-                                                value={editingComment.text} 
-                                                onChange={e => setEditingComment({...editingComment, text: e.target.value})}
-                                                className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-medium resize-none focus:bg-white outline-none ring-2 ring-blue-500"
-                                                rows="3"
-                                            />
-                                            <div className="flex gap-2 justify-end">
-                                                <button onClick={() => setEditingComment({id: null, text: ""})} className="text-xs text-slate-500 hover:text-slate-700 font-bold">Cancelar</button>
-                                                <button onClick={handleSaveEditComment} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-bold">Salvar</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase">
-                                                <span className="text-blue-600">{String(comm.user).split('@')[0]}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span>
-                                                    {comm.user === user.email && (
-                                                        <div className="flex gap-1">
-                                                            <button onClick={() => setEditingComment({ id: comm.id, text: comm.text })} className="hover:text-blue-600 transition-colors"><Edit2 size={10} /></button>
-                                                            <button onClick={() => handleDeleteComment(comm.id)} className="hover:text-red-500 transition-colors"><Trash size={10} /></button>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <p className="text-xs text-slate-600 font-medium whitespace-pre-wrap">{String(comm.text)}</p>
-                                        </>
-                                    )}
+                                    <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase"><span className="text-blue-600">{String(comm.user).split('@')[0]}</span><span>{new Date(comm.timestamp).toLocaleString('pt-PT')}</span></div>
+                                    <p className="text-xs text-slate-600 font-medium">{String(comm.text)}</p>
                                 </div>
                             ))}
                         </div>
