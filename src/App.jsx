@@ -1,48 +1,49 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-    Ship, Settings, LayoutList, Settings2, MapPin, 
-    PlusCircle, Trash, Anchor, RefreshCcw, CheckCircle, 
+import {
+    Ship, Settings, LayoutList, Settings2, MapPin,
+    PlusCircle, Trash, Anchor, RefreshCcw, CheckCircle,
     Loader2, AlertTriangle, LogOut, ChevronDown, ChevronRight,
     CheckSquare, Square, ListFilter, Calendar, Search,
-    Printer, FileSpreadsheet, ClipboardList, User, Clock, 
+    Printer, FileSpreadsheet, ClipboardList, User, Clock,
     X, FileText, Download, Filter, Table, MessageSquare, Send, Check,
-    Archive, RotateCcw, ArrowUp, ArrowDown, Edit2, ArrowLeft, ArrowRight
+    Archive, RotateCcw, ArrowUp, ArrowDown, Edit2, ArrowLeft, ArrowRight,
+    LayoutDashboard, PieChart, BarChart2, Activity, History
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
-import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    onSnapshot, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    setDoc, 
-    query 
+import {
+    getFirestore,
+    collection,
+    doc,
+    onSnapshot,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    setDoc,
+    query
 } from "firebase/firestore";
-import { 
-    getAuth, 
-    onAuthStateChanged, 
-    signInWithEmailAndPassword, 
-    signOut 
+import {
+    getAuth,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut
 } from "firebase/auth";
 
 // --- CONFIGURAÇÃO OFICIAL VALE ---
 const firebaseConfig = {
-  apiKey: "AIzaSyDzfx_lsbaYZinR87qEQZ0Alvz5D8pUCJI",
-  authDomain: "doc-control---vale.firebaseapp.com",
-  projectId: "doc-control---vale",
-  storageBucket: "doc-control---vale.firebasestorage.app",
-  messagingSenderId: "475792494162",
-  appId: "1:475792494162:web:83a0601f5f2b37e926198b"
+    apiKey: "AIzaSyDzfx_lsbaYZinR87qEQZ0Alvz5D8pUCJI",
+    authDomain: "doc-control---vale.firebaseapp.com",
+    projectId: "doc-control---vale",
+    storageBucket: "doc-control---vale.firebasestorage.app",
+    messagingSenderId: "475792494162",
+    appId: "1:475792494162:web:83a0601f5f2b37e926198b"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-const APP_ID = "doc-control---vale"; 
-const DATA_PATH = "public/data"; 
+const APP_ID = "doc-control---vale";
+const DATA_PATH = "public/data";
 
 /**
  * Utilitário para garantir que o valor do status seja sempre um Array.
@@ -60,10 +61,10 @@ const normalizeStatus = (val) => {
 const MultiSelectCell = ({ options, selected, onChange, disabled, processName }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
-    
-    const currentSelected = useMemo(() => 
+
+    const currentSelected = useMemo(() =>
         normalizeStatus(selected).filter(s => options.includes(s)),
-    [selected, options]);
+        [selected, options]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -82,13 +83,13 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
         onChange(next);
     };
 
-    const displayText = currentSelected.length > 0 
-        ? String(currentSelected[currentSelected.length - 1]) 
+    const displayText = currentSelected.length > 0
+        ? String(currentSelected[currentSelected.length - 1])
         : "NENHUM";
 
     const hasSelection = currentSelected.length > 0;
     const isLastOptionSelected = hasSelection && currentSelected.includes(options[options.length - 1]);
-    
+
     let colorClass = "";
     if (!hasSelection) {
         colorClass = "bg-red-50 text-red-600 border-red-100";
@@ -100,7 +101,7 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
 
     return (
         <div className="relative w-full" ref={containerRef}>
-            <button 
+            <button
                 disabled={disabled}
                 onClick={() => setIsOpen(!isOpen)}
                 type="button"
@@ -119,8 +120,8 @@ const MultiSelectCell = ({ options, selected, onChange, disabled, processName })
                         {options.map(opt => {
                             const isChecked = currentSelected.includes(opt);
                             return (
-                                <div 
-                                    key={opt} 
+                                <div
+                                    key={opt}
                                     onClick={() => toggleOption(opt)}
                                     className={`flex items-center gap-2 p-1 rounded-md cursor-pointer transition-all hover:bg-slate-50
                                         ${isChecked ? 'bg-blue-50/50' : ''}`}
@@ -150,8 +151,16 @@ export default function App() {
     const [password, setPassword] = useState("");
     const [loginError, setLoginError] = useState("");
     const [isLoggingIn, setIsLoggingIn] = useState(false);
-    const [viewMode, setViewMode] = useState('user'); 
-    const [activeTab, setActiveTab] = useState('open'); 
+    const [viewMode, setViewMode] = useState('user');
+    const [activeTab, setActiveTab] = useState('open');
+    const [archiveGroupBy, setArchiveGroupBy] = useState('date');
+    const [shipmentToDelete, setShipmentToDelete] = useState(null);
+    const [dashboardFilters, setDashboardFilters] = useState({
+        start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0],
+        ports: [],
+        status: 'both' // New status filter
+    });
     const [groupBy, setGroupBy] = useState('port');
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
     const [collapsedGroups, setCollapsedGroups] = useState({});
@@ -168,11 +177,11 @@ export default function App() {
     const [logs, setLogs] = useState([]);
     const [formPort, setFormPort] = useState("");
     const [newVessel, setNewVessel] = useState({ serviceNum: '', vesselName: '', oblDate: new Date().toISOString().split('T')[0] });
-    const [newMasterPort, setNewMasterPort] = useState(""); 
+    const [newMasterPort, setNewMasterPort] = useState("");
 
     const [editingTopic, setEditingTopic] = useState({ processId: null, index: null, value: "" });
     const [newTopic, setNewTopic] = useState({ processId: null, value: "" });
-    
+
     // Novo estado para edição de terminais e comentários
     const [editingPort, setEditingPort] = useState({ index: null, value: "" });
     const [editingComment, setEditingComment] = useState({ id: null, text: "" });
@@ -196,8 +205,8 @@ export default function App() {
         if (e) e.preventDefault();
         setLoginError("");
         setIsLoggingIn(true);
-        try { 
-            await signInWithEmailAndPassword(auth, email.trim(), password); 
+        try {
+            await signInWithEmailAndPassword(auth, email.trim(), password);
         } catch (error) {
             setLoginError("Credenciais inválidas.");
             setIsLoggingIn(false);
@@ -255,7 +264,7 @@ export default function App() {
         const updatedPorts = [...ports];
         const oldName = updatedPorts[editingPort.index];
         const newName = editingPort.value.trim().toUpperCase();
-        
+
         if (oldName !== newName) {
             updatedPorts[editingPort.index] = newName;
             await updatePortsConfig(updatedPorts);
@@ -278,7 +287,7 @@ export default function App() {
         if (!newVessel.serviceNum || !newVessel.vesselName || !user) return;
         const initialStatus = {};
         processes.forEach(p => initialStatus[p.id] = []);
-        
+
         try {
             await addDoc(collection(db, 'artifacts', APP_ID, DATA_PATH, 'shipments'), {
                 createdAt: Date.now(),
@@ -287,8 +296,8 @@ export default function App() {
                 serviceNum: String(newVessel.serviceNum),
                 vessel: String(newVessel.vesselName).toUpperCase(),
                 oblDate: String(newVessel.oblDate),
-                finalDraftSentDate: '', 
-                finalDraftApprovedDate: '', 
+                finalDraftSentDate: '',
+                finalDraftApprovedDate: '',
                 status: initialStatus,
                 comments: [],
                 isClosed: false,
@@ -302,19 +311,19 @@ export default function App() {
     // --- COMENTÁRIOS ---
     const handleAddComment = async () => {
         if (!newCommentText.trim() || !activeShipComment || !user) return;
-        const newComment = { 
-            id: Date.now(), 
-            text: String(newCommentText).trim(), 
-            timestamp: Date.now(), 
-            user: String(user.email) 
+        const newComment = {
+            id: Date.now(),
+            text: String(newCommentText).trim(),
+            timestamp: Date.now(),
+            user: String(user.email)
         };
         const updatedComments = [...(activeShipComment.comments || []), newComment];
         try {
-            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), { 
-                comments: updatedComments 
+            await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
+                comments: updatedComments
             });
             setNewCommentText("");
-            setActiveShipComment({...activeShipComment, comments: updatedComments});
+            setActiveShipComment({ ...activeShipComment, comments: updatedComments });
         } catch (err) { console.error(err); }
     };
 
@@ -323,7 +332,7 @@ export default function App() {
         if (!confirm("Excluir este comentário?")) return;
 
         const updatedComments = activeShipComment.comments.filter(c => c.id !== commentId);
-        
+
         try {
             await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', activeShipComment.id), {
                 comments: updatedComments
@@ -335,7 +344,7 @@ export default function App() {
     const handleSaveEditComment = async () => {
         if (!editingComment.id || !editingComment.text.trim() || !activeShipComment) return;
 
-        const updatedComments = activeShipComment.comments.map(c => 
+        const updatedComments = activeShipComment.comments.map(c =>
             c.id === editingComment.id ? { ...c, text: editingComment.text.trim() } : c
         );
 
@@ -380,7 +389,7 @@ export default function App() {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 let currentProcesses = data.processes || [];
-                
+
                 const norm = (s) => String(s || "").trim().toUpperCase();
                 const silogIdx = currentProcesses.findIndex(p => norm(p.name) === "SILOG");
                 const mercanteIdx = currentProcesses.findIndex(p => norm(p.name) === "PROCEDIMENTOS MERCANTES");
@@ -391,7 +400,7 @@ export default function App() {
                     else currentProcesses.push(newSilog);
                     await updateDoc(configRef, { processes: currentProcesses });
                 }
-                
+
                 setPorts(data.ports || []);
                 setProcesses(currentProcesses);
                 if (data.ports?.length > 0 && !formPort) setFormPort(data.ports[0]);
@@ -428,7 +437,7 @@ export default function App() {
         try {
             await updateDoc(configRef, { processes: newProcesses });
             logAction("CONFIG_COLUNAS", "Alteração na estrutura de colunas");
-        } catch (e) {}
+        } catch (e) { }
     };
 
     const handleMoveProcess = (index, direction) => {
@@ -480,9 +489,7 @@ export default function App() {
         newProcesses[pIdx].options = options;
         updateConfig(newProcesses);
         setNewTopic({ processId: null, value: "" });
-    };
-
-    // --- CÁLCULOS ---
+    };    // --- CÁLCULOS ---
     const calculateProgress = (ship) => {
         if (!processes || processes.length === 0) return 0;
         let total = 0, acquired = 0;
@@ -494,43 +501,66 @@ export default function App() {
         return total === 0 ? 0 : Math.round((acquired / total) * 100);
     };
 
+    const calculateDraftProductivity = (ship) => {
+        if (!ship.finalDraftSentDate || !ship.finalDraftApprovedDate) return null;
+        const sent = new Date(ship.finalDraftSentDate);
+        const approved = new Date(ship.finalDraftApprovedDate);
+        const diffDays = Math.ceil((approved - sent) / (1000 * 60 * 60 * 24));
+        return diffDays >= 0 ? diffDays : 0;
+    };
+
     // --- FILTRAGEM ---
     const filteredAndSearched = useMemo(() => {
         let base = shipments;
-        if (activeTab === 'open') base = base.filter(s => !s.isClosed && !s.isArchived);
-        else if (activeTab === 'closed') base = base.filter(s => s.isClosed && !s.isArchived);
+        if (activeTab === 'open') base = base.filter(s => !s.isArchived);
         else if (activeTab === 'archive') base = base.filter(s => s.isArchived);
-        
-        if (groupBy === 'range' && dateRange.start && dateRange.end) {
-            const start = new Date(dateRange.start).getTime();
-            const end = new Date(dateRange.end).getTime() + 86400000;
-            base = base.filter(s => {
-                const shipDate = s.oblDate ? new Date(s.oblDate).getTime() : (s.closedAt || s.createdAt);
-                return shipDate >= start && shipDate <= end;
-            });
+        else if (activeTab === 'dashboard') {
+            if (dashboardFilters.ports.length > 0) {
+                base = base.filter(s => dashboardFilters.ports.includes(s.port));
+            }
+            if (dashboardFilters.status === 'open') base = base.filter(s => !s.isArchived);
+            else if (dashboardFilters.status === 'closed') base = base.filter(s => s.isArchived);
+
+            if (dashboardFilters.start && dashboardFilters.end) {
+                const s = new Date(dashboardFilters.start).getTime();
+                const e = new Date(dashboardFilters.end).getTime() + 86400000;
+                base = base.filter(ship => {
+                    const d = ship.oblDate ? new Date(ship.oblDate).getTime() : ship.createdAt;
+                    return d >= s && d <= e;
+                });
+            }
         }
-        return base.filter(s => {
-            const search = searchTerm.toLowerCase();
-            return String(s.vessel || "").toLowerCase().includes(search) || 
-                   String(s.serviceNum || "").toLowerCase().includes(search) || 
-                   String(s.port || "").toLowerCase().includes(search);
-        });
-    }, [shipments, activeTab, searchTerm, groupBy, dateRange]);
+
+        const search = searchTerm.toLowerCase();
+        return base.filter(s =>
+            String(s.vessel || "").toLowerCase().includes(search) ||
+            String(s.serviceNum || "").toLowerCase().includes(search) ||
+            String(s.port || "").toLowerCase().includes(search)
+        );
+    }, [shipments, activeTab, searchTerm, dashboardFilters]);
 
     const groups = useMemo(() => {
         const g = {};
         filteredAndSearched.forEach(ship => {
             const refDate = ship.oblDate ? new Date(ship.oblDate) : new Date(ship.closedAt || ship.createdAt);
             let groupName = "OUTROS";
-            if (groupBy === 'port') groupName = String(ship.port || "Sem Porto");
-            else if (groupBy === 'month') groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
-            else if (groupBy === 'year') groupName = `ANO ${refDate.getFullYear()}`;
-            else if (groupBy === 'range') groupName = `OBL: ${new Date(dateRange.start).toLocaleDateString('pt-PT')} A ${new Date(dateRange.end).toLocaleDateString('pt-PT')}`;
+
+            if (activeTab === 'archive') {
+                if (archiveGroupBy === 'date') groupName = refDate.toLocaleDateString('pt-PT');
+                else if (archiveGroupBy === 'alphabetical') groupName = ship.vessel?.[0]?.toUpperCase() || '#';
+                else if (archiveGroupBy === 'month') groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
+                else if (archiveGroupBy === 'port') groupName = String(ship.port || "Sem Porto");
+            } else {
+                if (groupBy === 'port') groupName = String(ship.port || "Sem Porto");
+                else if (groupBy === 'month') groupName = refDate.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase();
+                else if (groupBy === 'year') groupName = `ANO ${refDate.getFullYear()}`;
+            }
+
             if (!g[groupName]) g[groupName] = [];
             g[groupName].push(ship);
         });
         return g;
-    }, [filteredAndSearched, groupBy, dateRange]);
+    }, [filteredAndSearched, groupBy, archiveGroupBy, activeTab]);
 
     const handleExport = (format) => {
         if (format === 'spreadsheet-pdf') { setIsCompactMode(true); setIsExportMenuOpen(false); return; }
@@ -587,6 +617,13 @@ export default function App() {
             </header>
 
             <main className="flex-1 p-2 md:p-4 max-w-full mx-auto w-full">
+                {viewMode === 'user' && (
+                    <div className="flex bg-slate-200/50 p-1 rounded-xl mb-4 gap-1 no-print backdrop-blur-sm border border-slate-200">
+                        <button onClick={() => setActiveTab('open')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-black text-[10px] uppercase transition-all ${activeTab === 'open' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-white/50'}`}><LayoutList size={14} /> Gestão</button>
+                        <button onClick={() => setActiveTab('archive')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-black text-[10px] uppercase transition-all ${activeTab === 'archive' ? 'bg-white shadow-sm text-amber-600' : 'text-slate-500 hover:bg-white/50'}`}><Archive size={14} /> Arquivo</button>
+                        <button onClick={() => setActiveTab('dashboard')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-black text-[10px] uppercase transition-all ${activeTab === 'dashboard' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:bg-white/50'}`}><LayoutDashboard size={14} /> Dashboard</button>
+                    </div>
+                )}
                 {viewMode === 'master' ? (
                     <div className="space-y-4 animate-in fade-in duration-500">
                         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
@@ -595,36 +632,36 @@ export default function App() {
                                 {/* NOVO CARD DE TERMINAIS */}
                                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col h-full ring-2 ring-blue-100">
                                     <div className="flex justify-between items-center mb-3">
-                                        <h3 className="font-black text-[9px] text-blue-600 uppercase tracking-widest flex items-center gap-1"><MapPin size={10}/> TERMINAIS / PORTOS</h3>
+                                        <h3 className="font-black text-[9px] text-blue-600 uppercase tracking-widest flex items-center gap-1"><MapPin size={10} /> TERMINAIS / PORTOS</h3>
                                     </div>
                                     <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
                                         {ports.map((p, idx) => (
                                             <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
                                                 {editingPort.index === idx ? (
-                                                    <input 
+                                                    <input
                                                         autoFocus
                                                         className="flex-1 text-[9px] font-bold outline-none uppercase bg-slate-50 border-b border-blue-500"
                                                         value={editingPort.value}
-                                                        onChange={e => setEditingPort({...editingPort, value: e.target.value})}
+                                                        onChange={e => setEditingPort({ ...editingPort, value: e.target.value })}
                                                         onBlur={handleSaveEditPort}
                                                         onKeyDown={e => e.key === 'Enter' && handleSaveEditPort()}
                                                     />
                                                 ) : (
                                                     <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(p)}</span>
                                                 )}
-                                                
+
                                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                                    <button onClick={() => handleMovePort(idx, -1)} className="text-slate-400 hover:text-blue-600"><ArrowUp size={10}/></button>
-                                                    <button onClick={() => handleMovePort(idx, 1)} className="text-slate-400 hover:text-blue-600"><ArrowDown size={10}/></button>
-                                                    <button onClick={() => setEditingPort({ index: idx, value: p })} className="text-amber-500 hover:text-amber-700"><Edit2 size={10}/></button>
-                                                    <button onClick={() => handleDeletePort(idx)} className="text-red-500 hover:text-red-700"><Trash size={10}/></button>
+                                                    <button onClick={() => handleMovePort(idx, -1)} className="text-slate-400 hover:text-blue-600"><ArrowUp size={10} /></button>
+                                                    <button onClick={() => handleMovePort(idx, 1)} className="text-slate-400 hover:text-blue-600"><ArrowDown size={10} /></button>
+                                                    <button onClick={() => setEditingPort({ index: idx, value: p })} className="text-amber-500 hover:text-amber-700"><Edit2 size={10} /></button>
+                                                    <button onClick={() => handleDeletePort(idx)} className="text-red-500 hover:text-red-700"><Trash size={10} /></button>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                     <div className="relative">
                                         <input className="w-full p-2 pr-8 bg-white border border-slate-200 rounded-xl text-[9px] font-bold uppercase" placeholder="Novo Terminal..." value={newMasterPort} onChange={e => setNewMasterPort(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddPortMaster()} />
-                                        <button onClick={handleAddPortMaster} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12}/></button>
+                                        <button onClick={handleAddPortMaster} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12} /></button>
                                     </div>
                                 </div>
 
@@ -633,23 +670,23 @@ export default function App() {
                                         <div className="flex justify-between items-center mb-3">
                                             <h3 className="font-black text-[9px] text-blue-600 uppercase tracking-widest">{String(proc.name)}</h3>
                                             <div className="flex gap-1 no-print">
-                                                <button onClick={() => handleMoveProcess(pIdx, -1)} className="p-1 bg-white border rounded text-slate-400"><ArrowLeft size={10}/></button>
-                                                <button onClick={() => handleMoveProcess(pIdx, 1)} className="p-1 bg-white border rounded text-slate-400"><ArrowRight size={10}/></button>
+                                                <button onClick={() => handleMoveProcess(pIdx, -1)} className="p-1 bg-white border rounded text-slate-400"><ArrowLeft size={10} /></button>
+                                                <button onClick={() => handleMoveProcess(pIdx, 1)} className="p-1 bg-white border rounded text-slate-400"><ArrowRight size={10} /></button>
                                             </div>
                                         </div>
                                         <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar max-h-[150px] pr-1 mb-3">
                                             {proc.options?.map((opt, idx) => (
                                                 <div key={idx} className="bg-white p-1.5 rounded-lg border border-slate-100 flex items-center justify-between group shadow-sm">
                                                     {editingTopic.processId === proc.id && editingTopic.index === idx ? (
-                                                        <input autoFocus className="flex-1 text-[9px] font-bold outline-none uppercase bg-slate-50" value={editingTopic.value} onChange={e => setEditingTopic({...editingTopic, value: e.target.value})} onBlur={handleSaveEditTopic} onKeyDown={e => e.key === 'Enter' && handleSaveEditTopic()} />
+                                                        <input autoFocus className="flex-1 text-[9px] font-bold outline-none uppercase bg-slate-50" value={editingTopic.value} onChange={e => setEditingTopic({ ...editingTopic, value: e.target.value })} onBlur={handleSaveEditTopic} onKeyDown={e => e.key === 'Enter' && handleSaveEditTopic()} />
                                                     ) : (
                                                         <>
                                                             <span className="text-[9px] font-bold text-slate-700 uppercase truncate pr-1">{String(opt)}</span>
                                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                                                <button onClick={() => handleMoveTopic(proc.id, idx, -1)} className="text-slate-400"><ArrowUp size={10}/></button>
-                                                                <button onClick={() => handleMoveTopic(proc.id, idx, 1)} className="text-slate-400"><ArrowDown size={10}/></button>
-                                                                <button onClick={() => setEditingTopic({ processId: proc.id, index: idx, value: opt })} className="text-amber-600"><Edit2 size={10}/></button>
-                                                                <button onClick={() => handleDeleteTopic(proc.id, idx)} className="text-red-500"><Trash size={10}/></button>
+                                                                <button onClick={() => handleMoveTopic(proc.id, idx, -1)} className="text-slate-400"><ArrowUp size={10} /></button>
+                                                                <button onClick={() => handleMoveTopic(proc.id, idx, 1)} className="text-slate-400"><ArrowDown size={10} /></button>
+                                                                <button onClick={() => setEditingTopic({ processId: proc.id, index: idx, value: opt })} className="text-amber-600"><Edit2 size={10} /></button>
+                                                                <button onClick={() => handleDeleteTopic(proc.id, idx)} className="text-red-500"><Trash size={10} /></button>
                                                             </div>
                                                         </>
                                                     )}
@@ -658,7 +695,7 @@ export default function App() {
                                         </div>
                                         <div className="relative">
                                             <input className="w-full p-2 pr-8 bg-white border border-slate-200 rounded-xl text-[9px] font-bold uppercase" placeholder="Novo item..." value={newTopic.processId === proc.id ? newTopic.value : ""} onChange={e => setNewTopic({ processId: proc.id, value: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleAddTopic(proc.id)} />
-                                            <button onClick={() => handleAddTopic(proc.id)} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12}/></button>
+                                            <button onClick={() => handleAddTopic(proc.id)} className="absolute right-1 top-1/2 -translate-y-1/2 p-1 bg-blue-600 text-white rounded-lg"><PlusCircle size={12} /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -687,36 +724,348 @@ export default function App() {
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 no-print">
-                            <div className="flex flex-col md:flex-row gap-2 items-center">
-                                <div className="flex-1 relative w-full">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                    <input type="text" placeholder="Pesquisa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-[10px] font-medium" />
-                                    {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500"><X size={14} /></button>}
+                        {activeTab === 'open' && (
+                            <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 no-print">
+                                <div className="flex flex-col md:flex-row gap-2 items-center">
+                                    <div className="flex-1 relative w-full">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                        <input type="text" placeholder="Pesquisa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 text-[10px] font-medium" />
+                                        {searchTerm && <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500"><X size={14} /></button>}
+                                    </div>
+                                    <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-slate-800 text-[10px] uppercase tracking-tighter shrink-0"><Download size={12} /> Exportar</button>
                                 </div>
-                                <button onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 hover:bg-slate-800 text-[10px] uppercase tracking-tighter shrink-0"><Download size={12} /> Exportar</button>
-                            </div>
 
-                            <form onSubmit={handleAddShipment} className="grid grid-cols-1 md:grid-cols-4 gap-2 border-t border-slate-50 pt-2">
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Terminal</label>
-                                    <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-1.5 border rounded-md bg-slate-50 font-bold outline-none text-[10px] h-8">{ports.map(p => <option key={String(p)} value={String(p)}>{String(p)}</option>)}</select>
-                                </div>
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Navio & AT</label>
-                                    <div className="flex gap-1 h-8"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({...newVessel, serviceNum: e.target.value})} className="w-14 border p-1.5 rounded-md bg-slate-50 font-bold text-[10px]" required />
-                                        <input type="text" placeholder="Navio" value={newVessel.vesselName} onChange={e => setNewVessel({...newVessel, vesselName: e.target.value})} className="flex-1 border p-1.5 rounded-md uppercase bg-slate-50 font-bold text-[10px]" required />
+                                <form onSubmit={handleAddShipment} className="grid grid-cols-1 md:grid-cols-4 gap-2 border-t border-slate-50 pt-2">
+                                    <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Terminal</label>
+                                        <select value={formPort} onChange={e => setFormPort(e.target.value)} className="p-1.5 border rounded-md bg-slate-50 font-bold outline-none text-[10px] h-8">{ports.map(p => <option key={String(p)} value={String(p)}>{String(p)}</option>)}</select>
+                                    </div>
+                                    <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Navio & AT</label>
+                                        <div className="flex gap-1 h-8"><input type="text" placeholder="AT" value={newVessel.serviceNum} onChange={e => setNewVessel({ ...newVessel, serviceNum: e.target.value })} className="w-14 border p-1.5 rounded-md bg-slate-50 font-bold text-[10px]" required />
+                                            <input type="text" placeholder="Navio" value={newVessel.vesselName} onChange={e => setNewVessel({ ...newVessel, vesselName: e.target.value })} className="flex-1 border p-1.5 rounded-md uppercase bg-slate-50 font-bold text-[10px]" required />
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Data OBL</label>
+                                        <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({ ...newVessel, oblDate: e.target.value })} className="w-full border p-1.5 rounded-md bg-slate-50 font-bold text-[10px] h-8" required />
+                                    </div>
+                                    <button type="submit" className="bg-blue-600 text-white font-black rounded-lg hover:bg-blue-700 h-8 text-[9px] uppercase mt-auto tracking-widest transition-all active:scale-95">Abrir Pasta</button>
+                                </form>
+                            </div>
+                        )}
+
+                        {activeTab === 'archive' && (
+                            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 no-print">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2"><Archive size={14} className="text-amber-500" /> Arquivo de Atendimentos</h3>
+                                    <div className="flex-1 min-w-[200px] relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                        <input type="text" placeholder="Pesquisar no arquivo..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-8 py-2 bg-slate-50 border rounded-xl text-[10px] outline-none" />
+                                    </div>
+                                    <div className="flex bg-slate-100 p-1 rounded-lg gap-1">
+                                        {[
+                                            { id: 'date', label: 'Data', icon: Calendar },
+                                            { id: 'alphabetical', label: 'A-Z', icon: ListFilter },
+                                            { id: 'month', label: 'Período', icon: Clock },
+                                            { id: 'port', label: 'Porto', icon: MapPin }
+                                        ].map(opt => (
+                                            <button key={opt.id} onClick={() => setArchiveGroupBy(opt.id)} className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase flex items-center gap-1.5 transition-all ${archiveGroupBy === opt.id ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                                                <opt.icon size={10} /> {opt.label}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
-                                <div className="flex flex-col gap-0.5"><label className="text-[7px] font-black text-slate-400 uppercase ml-1">Data OBL</label>
-                                    <input type="date" value={newVessel.oblDate} onChange={e => setNewVessel({...newVessel, oblDate: e.target.value})} className="w-full border p-1.5 rounded-md bg-slate-50 font-bold text-[10px] h-8" required />
-                                </div>
-                                <button type="submit" className="bg-blue-600 text-white font-black rounded-lg hover:bg-blue-700 h-8 text-[9px] uppercase mt-auto tracking-widest transition-all active:scale-95">Abrir Pasta</button>
-                            </form>
-                        </div>
+                            </div>
+                        )}
 
-                        {activeTab === 'open' && groups && Object.keys(groups).length > 0 && Object.keys(groups).sort((a,b) => b.localeCompare(a)).map(gName => (
+                        {activeTab === 'dashboard' && (
+                            <div className="space-y-4">
+                                <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end print:hidden">
+                                    <div className="flex flex-col gap-1 w-full md:w-32">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Início</label>
+                                        <input type="date" value={dashboardFilters.start} onChange={e => setDashboardFilters({ ...dashboardFilters, start: e.target.value })} className="w-full p-2 bg-slate-50 border rounded-xl text-[10px] font-bold" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 w-full md:w-32">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Fim</label>
+                                        <input type="date" value={dashboardFilters.end} onChange={e => setDashboardFilters({ ...dashboardFilters, end: e.target.value })} className="w-full p-2 bg-slate-50 border rounded-xl text-[10px] font-bold" />
+                                    </div>
+                                    <div className="flex flex-col gap-1 w-full md:w-40">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Status Itens</label>
+                                        <select
+                                            value={dashboardFilters.status}
+                                            onChange={e => setDashboardFilters({ ...dashboardFilters, status: e.target.value })}
+                                            className="w-full p-2 bg-slate-50 border rounded-xl text-[10px] font-bold uppercase"
+                                        >
+                                            <option value="both">ABERTOS & FECHADOS</option>
+                                            <option value="open">SOMENTE EM ABERTO</option>
+                                            <option value="closed">SOMENTE ARQUIVADOS</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex-1 flex flex-col gap-0.5 min-w-[200px]">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Comparativo Portos</label>
+                                        <div className="flex flex-wrap gap-1 p-1 bg-slate-50 border rounded-xl min-h-8">
+                                            {ports.map(p => {
+                                                const isSelected = dashboardFilters.ports.includes(p);
+                                                return (
+                                                    <button
+                                                        key={p}
+                                                        onClick={() => {
+                                                            const next = isSelected
+                                                                ? dashboardFilters.ports.filter(item => item !== p)
+                                                                : [...dashboardFilters.ports, p];
+                                                            setDashboardFilters({ ...dashboardFilters, ports: next });
+                                                        }}
+                                                        className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase transition-all ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-400 border border-slate-100'}`}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                );
+                                            })}
+                                            {dashboardFilters.ports.length === 0 && <span className="text-[8px] font-bold text-slate-300 p-1">TODOS OS PORTOS</span>}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => window.print()} className="bg-slate-900 text-white p-2.5 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2 hover:bg-slate-800 transition-all w-full md:w-auto print:hidden"><Printer size={14} /> Imprimir</button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-blue-50 rounded-2xl text-blue-600 shadow-inner"><Activity size={24} /></div>
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Volume Total</p><p className="text-3xl font-black text-slate-900">{filteredAndSearched.length}</p></div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-green-50 rounded-2xl text-green-600 shadow-inner"><Clock size={24} /></div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Média de Aprovação</p>
+                                            <p className="text-3xl font-black text-slate-900">
+                                                {(() => {
+                                                    const validShips = filteredAndSearched.map(s => calculateDraftProductivity(s)).filter(v => v !== null);
+                                                    const avg = validShips.length > 0 ? Math.round(validShips.reduce((a, b) => a + b, 0) / validShips.length) : 0;
+                                                    return `${avg} Dias`;
+                                                })()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                                        <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 shadow-inner"><History size={24} /></div>
+                                        <div><p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Taxa Conclusão</p><p className="text-3xl font-black text-slate-900">{filteredAndSearched.length > 0 ? Math.round((filteredAndSearched.filter(s => s.isArchived).length / filteredAndSearched.length) * 100) : 0}%</p></div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    {/* Gráfico Comparativo de Datas (Barra com Eixos) */}
+                                    <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+                                        <div className="flex justify-between items-center mb-8">
+                                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><BarChart2 size={16} className="text-indigo-500" /> Fluxo Drafts (Enviado x Aprovado)</h3>
+                                            <div className="flex gap-4">
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-sm"></div><span className="text-[8px] font-black text-slate-400 uppercase">Enviado</span></div>
+                                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></div><span className="text-[8px] font-black text-slate-400 uppercase">Aprovado</span></div>
+                                            </div>
+                                        </div>
+
+                                        {(() => {
+                                            const start = new Date(dashboardFilters.start);
+                                            const end = new Date(dashboardFilters.end);
+                                            const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+
+                                            let chartItems = [];
+                                            if (diffDays <= 30) {
+                                                // Modo Diário: Apenas datas com valores
+                                                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                                                    const dateStr = d.toISOString().split('T')[0];
+                                                    const sent = filteredAndSearched.filter(s => s.finalDraftSentDate === dateStr).length;
+                                                    const appv = filteredAndSearched.filter(s => s.finalDraftApprovedDate === dateStr).length;
+                                                    if (sent > 0 || appv > 0) {
+                                                        chartItems.push({
+                                                            label: `${d.getDate()}/${d.getMonth() + 1}`,
+                                                            fullLabel: d.toLocaleDateString('pt-PT'),
+                                                            sent, appv
+                                                        });
+                                                    }
+                                                }
+                                            } else {
+                                                // Modo Mensal: Agrupado por mês
+                                                const monthly = {};
+                                                filteredAndSearched.forEach(s => {
+                                                    if (s.finalDraftSentDate) {
+                                                        const d = new Date(s.finalDraftSentDate);
+                                                        const key = `${d.getMonth() + 1}/${d.getFullYear()}`;
+                                                        if (!monthly[key]) monthly[key] = { label: d.toLocaleString('pt-PT', { month: 'short' }).toUpperCase(), fullLabel: d.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase(), sent: 0, appv: 0, sortKey: d.getTime() };
+                                                        monthly[key].sent++;
+                                                    }
+                                                    if (s.finalDraftApprovedDate) {
+                                                        const d = new Date(s.finalDraftApprovedDate);
+                                                        const key = `${d.getMonth() + 1}/${d.getFullYear()}`;
+                                                        if (!monthly[key]) monthly[key] = { label: d.toLocaleString('pt-PT', { month: 'short' }).toUpperCase(), fullLabel: d.toLocaleString('pt-PT', { month: 'long', year: 'numeric' }).toUpperCase(), sent: 0, appv: 0, sortKey: d.getTime() };
+                                                        monthly[key].appv++;
+                                                    }
+                                                });
+                                                chartItems = Object.values(monthly).sort((a, b) => a.sortKey - b.sortKey);
+                                            }
+
+                                            const maxVal = Math.max(...chartItems.map(d => Math.max(d.sent, d.appv)), 5);
+
+                                            return (
+                                                <div className="flex-1 flex gap-4 h-64">
+                                                    {/* Eixo Vertical (Valores) */}
+                                                    <div className="flex flex-col justify-between py-2 text-[8px] font-black text-slate-300 w-4 text-right">
+                                                        {[maxVal, Math.round(maxVal / 2), 0].map(v => <span key={v}>{v}</span>)}
+                                                    </div>
+
+                                                    {/* Área dos Gráficos com Eixo Horizontal */}
+                                                    <div className="flex-1 flex flex-col">
+                                                        <div className="flex-1 flex items-end justify-between gap-1 pb-4 relative">
+                                                            {/* Grid Lines */}
+                                                            <div className="absolute inset-0 flex flex-col justify-between py-2 pointer-events-none">
+                                                                <div className="border-t border-slate-50 w-full h-0"></div>
+                                                                <div className="border-t border-slate-50 w-full h-0"></div>
+                                                                <div className="border-t border-slate-200 w-full h-0"></div>
+                                                            </div>
+
+                                                            {chartItems.length === 0 ? (
+                                                                <div className="flex-1 flex items-center justify-center text-[10px] font-black text-slate-300 uppercase italic">Sem dados registrados no período</div>
+                                                            ) : chartItems.map((d, i) => (
+                                                                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full group relative">
+                                                                    <div className="flex-1 w-full flex items-end justify-center gap-[1px]">
+                                                                        <div style={{ height: `${(d.sent / maxVal) * 100}%` }} className="w-full max-w-[12px] bg-blue-500 rounded-t-[2px] transition-all hover:bg-blue-600 relative z-10 shadow-sm shadow-blue-100"></div>
+                                                                        <div style={{ height: `${(d.appv / maxVal) * 100}%` }} className="w-full max-w-[12px] bg-emerald-500 rounded-t-[2px] transition-all hover:bg-emerald-600 relative z-10 shadow-sm shadow-emerald-100"></div>
+                                                                    </div>
+                                                                    {/* Eixo Horizontal (Labels) */}
+                                                                    <div className="h-4 flex items-center">
+                                                                        {(chartItems.length <= 15 || i % Math.ceil(chartItems.length / 12) === 0) && (
+                                                                            <span className="text-[7px] font-black text-slate-400 mt-1 whitespace-nowrap">{d.label}</span>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div className="absolute bottom-full mb-3 bg-slate-900/90 backdrop-blur-md text-white text-[8px] p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-20 whitespace-nowrap shadow-xl border border-white/10">
+                                                                        <p className="font-bold border-b border-white/10 pb-1 mb-1">{d.fullLabel}</p>
+                                                                        <div className="flex justify-between gap-4"><span>Enviados:</span> <span className="font-black text-blue-400">{d.sent}</span></div>
+                                                                        <div className="flex justify-between gap-4"><span>Aprovados:</span> <span className="font-black text-emerald-400">{d.appv}</span></div>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+
+                                    {/* Gráfico Donut (Mix de Atendimento) */}
+                                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col">
+                                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-8 flex items-center gap-2"><PieChart size={16} className="text-blue-500" /> Mix por Porto</h3>
+                                        <div className="flex-1 flex flex-col items-center justify-center">
+                                            <div className="relative w-40 h-40 group cursor-default">
+                                                <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90 drop-shadow-lg">
+                                                    {(() => {
+                                                        let accumulatedPct = 0;
+                                                        const portColors = ['#2563eb', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#f97316'];
+                                                        const radius = 35;
+                                                        const circumference = 2 * Math.PI * radius;
+
+                                                        return ports.map((port, idx) => {
+                                                            const count = filteredAndSearched.filter(s => s.port === port).length;
+                                                            if (count === 0) return null;
+                                                            const pct = (count / filteredAndSearched.length) * 100;
+                                                            const strokeDasharray = `${(pct / 100) * circumference} 1000`;
+                                                            const offset = (accumulatedPct / 100) * circumference * -1;
+                                                            accumulatedPct += pct;
+
+                                                            return (
+                                                                <circle
+                                                                    key={port}
+                                                                    r={radius} cx="50" cy="50"
+                                                                    fill="transparent"
+                                                                    stroke={portColors[idx % portColors.length]}
+                                                                    strokeWidth="15"
+                                                                    strokeDasharray={strokeDasharray}
+                                                                    strokeDashoffset={offset}
+                                                                    className="transition-all duration-700 hover:stroke-slate-900"
+                                                                />
+                                                            );
+                                                        });
+                                                    })()}
+                                                </svg>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-full w-[65%] h-[65%] m-auto shadow-inner border border-slate-50">
+                                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Portos</span>
+                                                    <span className="text-2xl font-black text-slate-900">{ports.filter(p => filteredAndSearched.some(s => s.port === p)).length}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-8 grid grid-cols-2 gap-x-6 gap-y-2 w-full px-2">
+                                                {ports.map((port, idx) => {
+                                                    const count = filteredAndSearched.filter(s => s.port === port).length;
+                                                    if (count === 0) return null;
+                                                    const colors = ['bg-blue-600', 'bg-emerald-500', 'bg-amber-500', 'bg-indigo-500', 'bg-pink-500', 'bg-orange-500'];
+                                                    const pct = Math.round((count / filteredAndSearched.length) * 100);
+                                                    return (
+                                                        <div key={port} className="flex items-center justify-between gap-3 group">
+                                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                                <div className={`w-2 h-2 rounded-full shrink-0 ${colors[idx % colors.length]}`}></div>
+                                                                <span className="text-[8px] font-bold text-slate-500 uppercase truncate tracking-tight">{port}</span>
+                                                            </div>
+                                                            <span className="text-[9px] font-black text-slate-900">{pct}%</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Relatório de Atendimentos Dashboard */}
+                                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-6 flex items-center gap-2"><Table size={16} className="text-blue-500" /> Relatório Executivo de Atendimentos</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="bg-slate-50 text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
+                                                    <th className="p-3">Embarcação / AT</th>
+                                                    <th className="p-3">Terminal</th>
+                                                    <th className="p-3 text-center">Envio Draft</th>
+                                                    <th className="p-3 text-center">Aprovação</th>
+                                                    <th className="p-3 text-center">Lead Time</th>
+                                                    <th className="p-3 text-right">Status GERAL</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {filteredAndSearched.map(ship => {
+                                                    const leadTime = calculateDraftProductivity(ship);
+                                                    return (
+                                                        <tr key={ship.id} className="hover:bg-slate-50 transition-colors">
+                                                            <td className="p-3">
+                                                                <div className="font-black text-[10px] uppercase text-slate-800 tracking-tight">{ship.vessel}</div>
+                                                                <div className="text-[8px] text-blue-600 font-bold font-mono">{ship.serviceNum}</div>
+                                                            </td>
+                                                            <td className="p-3 text-[9px] font-bold text-slate-600 uppercase">{ship.port}</td>
+                                                            <td className="p-3 text-center text-[9px] font-bold text-slate-500">{ship.finalDraftSentDate || '-'}</td>
+                                                            <td className="p-3 text-center text-[9px] font-bold text-slate-500">{ship.finalDraftApprovedDate || '-'}</td>
+                                                            <td className="p-3 text-center">
+                                                                {leadTime !== null ? (
+                                                                    <span className={`px-2 py-1 rounded-lg text-[9px] font-black ${leadTime > 3 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                                                                        {leadTime} {leadTime === 1 ? 'Dia' : 'Dias'}
+                                                                    </span>
+                                                                ) : '-'}
+                                                            </td>
+                                                            <td className="p-3 text-right">
+                                                                <div className="inline-flex items-center gap-2">
+                                                                    <div className="w-24 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-blue-500" style={{ width: `${calculateProgress(ship)}%` }}></div>
+                                                                    </div>
+                                                                    <span className="text-[9px] font-black text-slate-900 w-8">{calculateProgress(ship)}%</span>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab !== 'dashboard' && Object.keys(groups).length > 0 && Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(gName => (
                             <div key={gName} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                                 <div className="bg-slate-50/50 px-4 py-1.5 border-b flex justify-between items-center">
-                                    <div onClick={() => setCollapsedGroups(p => ({...p, [gName]: !p[gName]}))} className="cursor-pointer flex items-center gap-2">
+                                    <div onClick={() => setCollapsedGroups(p => ({ ...p, [gName]: !p[gName] }))} className="cursor-pointer flex items-center gap-2">
                                         {collapsedGroups[gName] ? <ChevronRight size={14} className="text-blue-500" /> : <ChevronDown size={14} className="text-blue-500" />}
                                         <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{String(gName)}</span>
                                     </div>
@@ -752,9 +1101,12 @@ export default function App() {
                                                         <td className="p-1 align-top">
                                                             <div className="min-w-0">
                                                                 <div className="font-black text-[9px] uppercase text-slate-800 truncate tracking-tight">{String(ship.vessel)}</div>
-                                                                <div className="text-[7px] text-blue-600 font-bold font-mono truncate">{String(ship.serviceNum || "")}</div>
+                                                                <div className="flex gap-1.5 overflow-hidden">
+                                                                    <div className="text-[7px] text-blue-600 font-bold font-mono truncate">{String(ship.serviceNum || "")}</div>
+                                                                    <div className="text-[7px] text-slate-400 font-bold uppercase truncate border-l border-slate-200 pl-1.5">{String(ship.port || "")}</div>
+                                                                </div>
                                                                 <div className="mt-1 w-full bg-slate-100 h-0.5 rounded-full overflow-hidden">
-                                                                    <div className={`h-full transition-all duration-1000 ${calculateProgress(ship) === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{width: `${calculateProgress(ship)}%`}}></div>
+                                                                    <div className={`h-full transition-all duration-1000 ${calculateProgress(ship) === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{ width: `${calculateProgress(ship)}%` }}></div>
                                                                 </div>
                                                             </div>
                                                         </td>
@@ -764,24 +1116,24 @@ export default function App() {
                                                             </td>
                                                         ))}
                                                         <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
+                                                            <input
+                                                                type="date"
                                                                 className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
                                                                 value={ship.finalDraftSentDate || ""}
                                                                 onChange={(e) => handleDateUpdate(ship.id, 'finalDraftSentDate', e.target.value)}
                                                             />
                                                         </td>
                                                         <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
+                                                            <input
+                                                                type="date"
                                                                 className="w-full bg-transparent text-[8px] font-bold text-slate-600 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
                                                                 value={ship.finalDraftApprovedDate || ""}
                                                                 onChange={(e) => handleDateUpdate(ship.id, 'finalDraftApprovedDate', e.target.value)}
                                                             />
                                                         </td>
                                                         <td className="p-1 text-center align-top">
-                                                            <input 
-                                                                type="date" 
+                                                            <input
+                                                                type="date"
                                                                 className="w-full bg-transparent text-[8px] font-bold text-slate-500 outline-none text-center cursor-pointer hover:bg-slate-100 rounded"
                                                                 value={ship.oblDate || ""}
                                                                 onChange={(e) => handleDateUpdate(ship.id, 'oblDate', e.target.value)}
@@ -789,9 +1141,15 @@ export default function App() {
                                                         </td>
                                                         <td className="p-1 text-center no-print align-top">
                                                             <div className="flex gap-1 justify-center">
-                                                                <button onClick={() => setActiveShipComment(ship)} className={`p-1 rounded bg-slate-50 text-slate-400 relative ${ship.comments?.length > 0 ? 'bg-amber-50 text-amber-600' : ''}`}><MessageSquare size={12}/>{ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[6px] px-0.5 rounded-full">{ship.comments.length}</span>}</button>
-                                                                <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isClosed: true, closedAt: Date.now() })} className="p-1 rounded bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all"><CheckCircle size={12}/></button>
-                                                                <button onClick={async () => { if(confirm(`Eliminar ${ship.vessel}?`)) await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id)); }} className="p-1 rounded bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all"><Trash size={12}/></button>
+                                                                <button onClick={() => setActiveShipComment(ship)} className={`p-1 rounded bg-slate-50 text-slate-400 relative ${ship.comments?.length > 0 ? 'bg-amber-50 text-amber-600' : ''}`}><MessageSquare size={12} />{ship.comments?.length > 0 && <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[6px] px-0.5 rounded-full">{ship.comments.length}</span>}</button>
+                                                                {activeTab === 'archive' ? (
+                                                                    <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: false })} className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-bold"><RotateCcw size={10} /> RESTAURAR</button>
+                                                                ) : (
+                                                                    <>
+                                                                        <button onClick={async () => await updateDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', ship.id), { isArchived: true, closedAt: Date.now() })} className="p-1 rounded bg-green-50 text-green-600 hover:bg-green-600 hover:text-white transition-all"><CheckCircle size={12} /></button>
+                                                                        <button onClick={() => setShipmentToDelete(ship)} className="p-1 rounded bg-red-50 text-red-400 hover:bg-red-500 hover:text-white transition-all"><Trash size={12} /></button>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -814,18 +1172,18 @@ export default function App() {
                             <button onClick={() => setActiveShipComment(null)} className="p-2 hover:bg-red-500 rounded-full transition-colors"><X size={20} /></button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-50/50">
-                            {(activeShipComment.comments || []).sort((a,b) => b.timestamp - a.timestamp).map(comm => (
+                            {(activeShipComment.comments || []).sort((a, b) => b.timestamp - a.timestamp).map(comm => (
                                 <div key={comm.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 space-y-2">
                                     {editingComment.id === comm.id ? (
                                         <div className="flex flex-col gap-2">
-                                            <textarea 
-                                                value={editingComment.text} 
-                                                onChange={e => setEditingComment({...editingComment, text: e.target.value})}
+                                            <textarea
+                                                value={editingComment.text}
+                                                onChange={e => setEditingComment({ ...editingComment, text: e.target.value })}
                                                 className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-medium resize-none focus:bg-white outline-none ring-2 ring-blue-500"
                                                 rows="3"
                                             />
                                             <div className="flex gap-2 justify-end">
-                                                <button onClick={() => setEditingComment({id: null, text: ""})} className="text-xs text-slate-500 hover:text-slate-700 font-bold">Cancelar</button>
+                                                <button onClick={() => setEditingComment({ id: null, text: "" })} className="text-xs text-slate-500 hover:text-slate-700 font-bold">Cancelar</button>
                                                 <button onClick={handleSaveEditComment} className="text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-bold">Salvar</button>
                                             </div>
                                         </div>
@@ -855,6 +1213,45 @@ export default function App() {
                     </div>
                 </div>
             )}
+            {shipmentToDelete && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in text-slate-900">
+                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border border-white">
+                        <div className="p-8 text-center space-y-4">
+                            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Confirmar Exclusão</h3>
+                            <p className="text-sm text-slate-500 font-medium">Você está prestes a excluir definitivamente o atendimento do navio <span className="text-slate-900 font-black">{shipmentToDelete.vessel}</span>. Esta ação não pode ser desfeita.</p>
+                            <div className="flex flex-col gap-2 pt-4">
+                                <button
+                                    onClick={async () => {
+                                        await deleteDoc(doc(db, 'artifacts', APP_ID, DATA_PATH, 'shipments', shipmentToDelete.id));
+                                        logAction("EXCLUIR_NAVIO", `Navio ${shipmentToDelete.vessel} excluído definitivamente`);
+                                        setShipmentToDelete(null);
+                                    }}
+                                    className="w-full bg-red-600 text-white font-black py-3 rounded-2xl hover:bg-red-700 transition-all text-xs uppercase tracking-widest shadow-lg shadow-red-200"
+                                >
+                                    Confirmar Exclusão
+                                </button>
+                                <button
+                                    onClick={() => setShipmentToDelete(null)}
+                                    className="w-full bg-slate-100 text-slate-600 font-black py-3 rounded-2xl hover:bg-slate-200 transition-all text-xs uppercase tracking-widest"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Removido o duplicado aqui */}
+
+            <footer className="fixed bottom-4 right-6 pointer-events-none z-[1000] no-print">
+                <p className="text-[6px] font-black text-slate-400/20 uppercase tracking-[0.2em] select-none">
+                    Created and developed by Filipe Souza and Lucas Souza
+                </p>
+            </footer>
         </div>
     );
 }
